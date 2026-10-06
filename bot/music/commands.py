@@ -191,8 +191,10 @@ class Music(commands.Cog):
     @app_commands.choices(name=[app_commands.Choice(name=x,value=x) for x in ("off","bassboost","nightcore","vaporwave","karaoke","8d","tremolo","rotation")])
     async def filter_cmd(self,i,name:app_commands.Choice[str]):
         if await reject_manager(i): return
-        self.player.queue_for(i.guild.id).filter=name.value
-        self.player.restart_current(i.guild)
+        q=self.player.queue_for(i.guild.id)
+        q.filter=name.value
+        q.effects_dirty=True
+        if i.guild.voice_client and i.guild.voice_client.is_playing(): self.player.restart_current(i.guild)
         await i.response.send_message(f"🎚️ Filter: **{name.value}**")
 
     @app_commands.command(name="speed",description="Atur kecepatan 0.5x-2x")
@@ -200,7 +202,8 @@ class Music(commands.Cog):
         if await reject_manager(i): return
         q=self.player.queue_for(i.guild.id)
         q.speed=float(value)
-        self.player.restart_current(i.guild)
+        q.effects_dirty=True
+        if i.guild.voice_client and i.guild.voice_client.is_playing(): self.player.restart_current(i.guild)
         await i.response.send_message(f"⏩ Speed: **{q.speed:.2f}x**")
 
     @app_commands.command(name="autoplay",description="Nyalakan/matikan autoplay")

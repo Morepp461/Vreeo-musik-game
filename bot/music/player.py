@@ -54,9 +54,13 @@ class MusicPlayer:
         voice=guild.voice_client
         q=self.queue_for(guild.id)
         if not voice or voice.is_playing() or voice.is_paused(): return
-        if q.replay_current and q.current:
+        replaying=q.replay_current and q.current is not None
+        if replaying:
             track=q.current; q.replay_current=False
-        else: track=q.pop_next()
+        else:
+            track=q.pop_next()
+        if track is not None and not replaying:
+            track.playback_retries=0
         if not track and q.autoplay and q.current:
             try:
                 results=await search(q.current.title,5)
@@ -133,7 +137,6 @@ class MusicPlayer:
             self.bot.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.play_next(guild)))
         try:
             voice.play(source,after=after)
-            track.playback_retries=0
             q.last_error=None
             if q.tracks:
                 asyncio.create_task(self._prefetch_next(guild))

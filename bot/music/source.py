@@ -62,7 +62,13 @@ async def _spotify_api(path,params=None):
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.get("https://api.spotify.com/v1/"+path,params=params,headers={"Authorization":f"Bearer {token}"}) as r:
             if r.status >= 400:
-                raise ValueError(f"Spotify API error ({r.status}).")
+                try:
+                    body=await r.json(content_type=None)
+                    detail=body.get("error",{}) if isinstance(body,dict) else {}
+                    message=detail.get("message") or detail.get("status") or str(body)
+                except Exception:
+                    message=(await r.text())[:300]
+                raise ValueError(f"Spotify API error ({r.status}): {message}")
             return await r.json()
 
 def _spotify_url(kind,item_id):
@@ -88,7 +94,7 @@ async def spotify_search(query,limit=5):
 
 async def _spotify_track_from_url(url):
     item_id=urlparse(url).path.rstrip("/").split("/")[-1]
-    return await _spotify_api(f"tracks/{item_id}")
+    return await _spotify_api(f"tracks/{item_id}", {"market":"ID"})
 
 async def _spotify_items_from_collection(url,kind,limit):
     item_id=urlparse(url).path.rstrip("/").split("/")[-1]

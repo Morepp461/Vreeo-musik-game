@@ -19,6 +19,23 @@ def rows(table, **filters):
     return q.execute().data or []
 
 
+def insert_match(tournament_id, round_number, match_number, home_team_id=None, away_team_id=None, status="scheduled", home_score=None, away_score=None):
+    payload = {
+        "tournament_id": tournament_id,
+        "round_number": round_number,
+        "match_number": match_number,
+        "home_team_id": str(home_team_id) if home_team_id is not None else None,
+        "away_team_id": str(away_team_id) if away_team_id is not None else None,
+        "status": status,
+        "home_score": home_score,
+        "away_score": away_score,
+    }
+    return supabase.table("tournament_matches").insert(payload).execute()
+
+
+def update_match(match_id, **fields):
+    return supabase.table("tournament_matches").update(fields).eq("id", match_id).execute()
+
 def tournament(tid):
     data = rows("tournaments", id=tid)
     return data[0] if data else None

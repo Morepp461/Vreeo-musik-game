@@ -92,7 +92,7 @@ async def _spotify_track_from_url(url):
 
 async def _spotify_items_from_collection(url,kind,limit):
     item_id=urlparse(url).path.rstrip("/").split("/")[-1]
-    endpoint=f"{kind}/{item_id}/tracks"
+    endpoint=f"{kind}/{item_id}/items" if kind=="playlist" else f"{kind}/{item_id}/tracks"
     out=[]
     offset=0
     while len(out)<limit:

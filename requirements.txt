@@ -1,4 +1,4 @@
 discord.py>=2.6,<3
 supabase>=2.18,<3
 python-dotenv>=1.1,<2
-yt-dlp>=2026.10.1
+yt-dlp[default]>=2026.8.19,<2027

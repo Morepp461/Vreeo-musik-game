@@ -18,7 +18,7 @@ BASE={
     "quiet":True,
     "no_warnings":True,
     "noplaylist":True,
-    "format":"bestaudio/best",
+    "format":"bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best",
     "skip_download":True,
     "extractor_args":{
         "youtube":{"player_client":["web_embedded"]},
@@ -38,15 +38,37 @@ async def _run(query,opts,timeout=25):
     return await asyncio.wait_for(asyncio.to_thread(_extract,query,opts),timeout=timeout)
 
 async def _run_youtube_with_fallback(query,opts,timeout=25):
-    """Keep the existing resolver path, but retry with safer public YouTube clients when one is challenged."""
-    clients=(["web_embedded","tv"],["tv"])
+    """Resolve with clients that currently produce playable YouTube CDN URLs."""
+    # YouTube has recently returned valid-looking googlevideo URLs that FFmpeg
+    # immediately rejects with 403. Try Android first, then public clients.
+    clients=(["android"],["web_embedded"],["tv"])
     last=None
     for client_list in clients:
         attempt={**opts,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in opts.get("extractor_args",{}).items()}}
         attempt["extractor_args"]["youtube"]={**attempt["extractor_args"].get("youtube",{}),"player_client":client_list}
         try:
             info=await _run(query,attempt,timeout)
-            if info:
+            if not info:
+                continue
+            entries=info.get("entries") if isinstance(info,dict) else None
+            probe=next((x for x in entries if x),None) if entries else info
+            stream_url=(probe or {}).get("url") if isinstance(probe,dict) else None
+            if stream_url:
+                headers=(probe.get("http_headers") or {}) if isinstance(probe,dict) else {}
+                try:
+                    probe_headers={k:v for k,v in headers.items() if k.lower() != "host"}
+                    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8),headers=probe_headers) as session:
+                        async with session.get(stream_url,headers={"Range":"bytes=0-1"}) as response:
+                            if response.status in (200,206):
+                                return info
+                            last=ValueError(f"YouTube stream probe HTTP {response.status}")
+                            log.warning("YouTube client %s returned an unusable stream (HTTP %s)",client_list,response.status)
+                            continue
+                except Exception as exc:
+                    last=exc
+                    log.warning("YouTube stream probe failed for %s: %s",client_list,exc)
+                    continue
+            else:
                 return info
         except Exception as exc:
             last=exc

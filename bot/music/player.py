@@ -112,25 +112,12 @@ class MusicPlayer:
                             break
                 else:
                     genre=q.autoplay_genre if mode=="genre" else "random"
-                    if mode=="random" and q.current:
-                        title=q.current.title.strip()
-                        artist=(q.current.uploader or "").strip()
-                        smart_queries=[
-                            f"similar songs to {title}",
-                            f"songs like {title}",
-                            f"{artist} similar songs" if artist and "topic" not in artist.lower() else f"music similar to {title}",
-                        ]
-                        queries=[x for x in smart_queries if x]
-                        fallback_queries=list(genre_queries["random"])
-                        random.shuffle(fallback_queries)
-                        queries.extend(fallback_queries[:2])
-                    else:
-                        queries=list(genre_queries.get(genre,genre_queries["random"]))
-                        random.shuffle(queries)
+                    queries=list(genre_queries.get(genre,genre_queries["random"]))
+                    random.shuffle(queries)
                     results=[]
                     # Try several queries: a single weak/blocked YouTube search must
                     # never make autoplay silently die.
-                    for query in queries[:5]:
+                    for query in queries[:4]:
                         try:
                             found=await search(query,10)
                         except Exception as exc:
@@ -199,13 +186,6 @@ class MusicPlayer:
                 q.current=None
                 if q.tracks:
                     return await self.play_next(guild)
-                if q.autoplay and guild.voice_client:
-                    # Autoplay candidates can individually fail YouTube resolution.
-                    # Do not kill autoplay just because one candidate is blocked.
-                    await self.refresh_now_playing(guild)
-                    await asyncio.sleep(1)
-                    if q.autoplay and guild.voice_client and not guild.voice_client.is_playing() and not guild.voice_client.is_paused():
-                        return await self.play_next(guild)
                 await self.refresh_now_playing(guild)
                 return False
             track.stream_url=data.get("stream_url")
@@ -224,8 +204,7 @@ class MusicPlayer:
             track.duration=data.get("duration") or track.duration
             track.thumbnail=data.get("thumbnail") or track.thumbnail
             track.uploader=data.get("uploader") or track.uploader
-        if not (replaying and track.playback_retries > 0):
-            self.record_play(guild.id,track)
+        self.record_play(guild.id,track)
         af=[]
         if FILTERS.get(q.filter): af.append(FILTERS[q.filter])
         if q.speed!=1.0: af.append("atempo=%.2f"%q.speed)

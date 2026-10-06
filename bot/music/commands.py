@@ -178,7 +178,8 @@ class Music(commands.Cog):
         q=self.player.queue_for(i.guild.id)
         if not q.current:return await i.response.send_message("Tidak ada lagu.")
         try:
-            if position.startswith(("+","-")): seconds=max(0,q.position+float(position))
+            current_pos=max(0,time.monotonic()-q.started_at) if q.started_at and not q.paused else q.position
+            if position.startswith(("+","-")): seconds=max(0,current_pos+float(position))
             elif ":" in position:
                 m,s=position.split(":",1); seconds=int(m)*60+float(s)
             else: seconds=float(position)

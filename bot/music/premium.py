@@ -14,7 +14,10 @@ MOODS = {
 
 def weekly(user_id:int):
     since=(datetime.now(timezone.utc)-timedelta(days=7)).isoformat()
-    rows=supabase.table("music_history").select("title,source_url,played_at").eq("user_id",user_id).gte("played_at",since).order("played_at",desc=True).limit(500).execute().data or []
+    try:
+        rows=supabase.table("music_history").select("title,source_url,played_at").eq("user_id",user_id).gte("played_at",since).order("played_at",desc=True).limit(500).execute().data or []
+    except Exception:
+        rows=[]
     counts=Counter((r.get("title") or "Unknown") for r in rows)
     artists=Counter()
     for title in counts:
@@ -24,7 +27,10 @@ def weekly(user_id:int):
 
 def taste(user_id:int):
     data=weekly(user_id)
-    fav=supabase.table("favorites").select("title").eq("user_id",user_id).limit(50).execute().data or []
+    try:
+        fav=supabase.table("favorites").select("title").eq("user_id",user_id).limit(50).execute().data or []
+    except Exception:
+        fav=[]
     all_titles=[r.get("title") or "Unknown" for r in fav]
     all_titles += list(data["songs"].elements())
     genres=Counter()

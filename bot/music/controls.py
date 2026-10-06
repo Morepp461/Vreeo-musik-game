@@ -36,9 +36,12 @@ def build_now_playing_embed(q):
     e.set_footer(text="VREEO MUSIC  •  Premium Player")
     return e
 
-from . import favorites
+from . import favorites, premium
 from .guard import can_control
 from .lyrics import fetch as fetch_lyrics
+from .source import search
+from .queue import Track
+from ..config import MAX_QUEUE_SIZE
 
 async def _kick_autoplay(interaction, player, guild_id):
     guild=player.bot.get_guild(guild_id)
@@ -422,6 +425,11 @@ class NowPlayingView(discord.ui.View):
         if not await self.guard(interaction): return
         await interaction.response.send_message("🤖 Pilih mode autoplay:",view=AutoplayView(self.player,self.guild_id),ephemeral=True)
 
+    @discord.ui.button(label="✨ Premium",style=discord.ButtonStyle.secondary,row=4)
+    async def premium_menu(self,interaction:discord.Interaction,button:discord.ui.Button):
+        if not await self.guard(interaction): return
+        await interaction.response.send_message("✨ Pilih fitur Premium:",view=PremiumView(self.player,self.guild_id),ephemeral=True)
+
     @discord.ui.button(emoji="📜",style=discord.ButtonStyle.secondary,row=1)
     async def queue(self,interaction:discord.Interaction,button:discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
@@ -430,3 +438,156 @@ class NowPlayingView(discord.ui.View):
             return await interaction.edit_original_response(content="Queue kosong.")
         view=QueueJumpView(self.player,self.guild_id)
         await interaction.edit_original_response(embed=view.embed(),view=view)
+
+
+class PremiumView(discord.ui.View):
+    def __init__(self,player,guild_id):
+        super().__init__(timeout=300)
+        self.player=player
+        self.guild_id=guild_id
+        options=[
+            discord.SelectOption(label="🎧 Music Discovery",value="discover",description="Temukan musik berdasarkan taste kamu"),
+            discord.SelectOption(label="🌙 Mood / Vibes",value="vibes",description="Pilih vibe dan isi queue"),
+            discord.SelectOption(label="🧠 Personal Taste Profile",value="taste",description="Lihat profil selera musik"),
+            discord.SelectOption(label="📅 Weekly Recap",value="recap",description="Ringkasan musik 7 hari terakhir"),
+            discord.SelectOption(label="✨ Crossfade",value="crossfade",description="Atur fade transition antar lagu"),
+        ]
+        select=discord.ui.Select(placeholder="Pilih fitur premium...",options=options)
+        select.callback=self.select_feature
+        self.add_item(select)
+
+    async def select_feature(self,interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        value=interaction.data["values"][0]
+        if value=="vibes":
+            return await interaction.response.edit_message(content="🌙 Pilih mood / vibe:",view=VibeView(self.player,self.guild_id))
+        if value=="crossfade":
+            return await interaction.response.edit_message(content="✨ Pilih durasi crossfade:",view=CrossfadeView(self.player,self.guild_id))
+        if value=="taste":
+            data=premium.taste(interaction.user.id)
+            e=discord.Embed(title="✦ VREEO MUSIC • PERSONAL TASTE",description=f"**{data['plays']}** plays dalam 7 hari terakhir")
+            songs="\n".join(f"**{i}.** {n[:65]} — {count}x" for i,(n,count) in enumerate(data["top_songs"],1)) or "Belum cukup data."
+            artists="\n".join(f"**{i}.** {n[:65]} — {count}x" for i,(n,count) in enumerate(data["top_artists"],1)) or "Belum cukup data."
+            genres="\n".join(f"**{n}** — {count}" for n,count in data["genres"]) or "Belum cukup data."
+            e.add_field(name="🔥 TOP SONGS",value=songs,inline=False)
+            e.add_field(name="🎤 TOP ARTISTS",value=artists,inline=False)
+            e.add_field(name="🎚️ VIBES",value=genres,inline=False)
+            e.set_footer(text="VREEO MUSIC • Personal Taste Profile")
+            return await interaction.response.edit_message(content=None,embed=e,view=self)
+        if value=="recap":
+            data=premium.weekly(interaction.user.id)
+            e=discord.Embed(title="✦ VREEO MUSIC • WEEKLY RECAP",description=f"**{data['plays']}** plays • 7 hari terakhir")
+            songs="\n".join(f"**{i}.** {n[:65]} — {count}x" for i,(n,count) in enumerate(data["songs"].most_common(5),1)) or "Belum ada data."
+            artists="\n".join(f"**{i}.** {n[:65]} — {count}x" for i,(n,count) in enumerate(data["artists"].most_common(5),1)) or "Belum ada data."
+            e.add_field(name="🔥 MOST PLAYED",value=songs,inline=False)
+            e.add_field(name="🎤 TOP ARTISTS",value=artists,inline=False)
+            e.set_footer(text="VREEO MUSIC • Weekly Recap")
+            return await interaction.response.edit_message(content=None,embed=e,view=self)
+        try:
+            queries=premium.discovery_queries(interaction.user.id)
+            results=[]
+            for query in queries:
+                try:
+                    results.extend(await search(query,5))
+                except Exception:
+                    continue
+                if len(results)>=5: break
+            seen=set(); clean=[]
+            for r in results:
+                url=r.get("webpage_url")
+                if url and url not in seen:
+                    seen.add(url); clean.append(r)
+            clean=clean[:5]
+            if not clean:
+                return await interaction.response.edit_message(content="❌ Discovery belum menemukan hasil.",view=self)
+            return await interaction.response.edit_message(content="🎧 Pilih hasil discovery untuk masuk queue:",view=DiscoveryView(self.player,self.guild_id,clean))
+        except Exception as exc:
+            return await interaction.response.edit_message(content=f"❌ Discovery gagal: {exc}",view=self)
+
+
+class DiscoveryView(discord.ui.View):
+    def __init__(self,player,guild_id,results):
+        super().__init__(timeout=180)
+        self.player=player; self.guild_id=guild_id; self.results=results
+        options=[discord.SelectOption(label=f"{i+1}. {r['title']}"[:100],value=str(i)) for i,r in enumerate(results)]
+        select=discord.ui.Select(placeholder="Pilih lagu discovery...",options=options)
+        select.callback=self.pick
+        self.add_item(select)
+
+    async def pick(self,interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        idx=int(interaction.data["values"][0]); r=self.results[idx]
+        q=self.player.queue_for(self.guild_id)
+        if len(q.tracks)>=MAX_QUEUE_SIZE:
+            return await interaction.response.send_message("Queue sudah penuh.",ephemeral=True)
+        if q.current and q.current.webpage_url==r["webpage_url"] or any(t.webpage_url==r["webpage_url"] for t in q.tracks):
+            return await interaction.response.send_message("Track itu sudah ada di queue.",ephemeral=True)
+        q.add(Track(title=r["title"],webpage_url=r["webpage_url"],duration=r.get("duration"),thumbnail=r.get("thumbnail"),uploader=r.get("uploader"),requested_by=interaction.user.id))
+        if self.player.bot.get_guild(self.guild_id).voice_client and not self.player.bot.get_guild(self.guild_id).voice_client.is_playing():
+            await self.player.play_next(self.player.bot.get_guild(self.guild_id))
+        await interaction.response.send_message(f"🎧 **{r['title']}** masuk queue.",ephemeral=True)
+
+
+class VibeView(discord.ui.View):
+    def __init__(self,player,guild_id):
+        super().__init__(timeout=180)
+        self.player=player; self.guild_id=guild_id
+        options=[discord.SelectOption(label=label,value=key) for key,(label,_) in premium.MOODS.items()]
+        select=discord.ui.Select(placeholder="Pilih vibe...",options=options)
+        select.callback=self.pick
+        self.add_item(select)
+
+    async def pick(self,interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        key=interaction.data["values"][0]
+        label,queries=premium.MOODS[key]
+        q=self.player.queue_for(self.guild_id)
+        room=max(0,MAX_QUEUE_SIZE-len(q.tracks))
+        results=[]
+        for query in queries:
+            try:
+                results.extend(await search(query,5))
+            except Exception:
+                continue
+            if len(results)>=room or len(results)>=10: break
+        seen=set(); added=0
+        for r in results:
+            url=r.get("webpage_url")
+            if not url or url in seen: continue
+            seen.add(url)
+            if q.current and q.current.webpage_url==url or any(t.webpage_url==url for t in q.tracks): continue
+            q.add(Track(title=r["title"],webpage_url=url,duration=r.get("duration"),thumbnail=r.get("thumbnail"),uploader=r.get("uploader"),requested_by=interaction.user.id))
+            added+=1
+            if added>=min(room,5): break
+        guild=self.player.bot.get_guild(self.guild_id)
+        if guild and guild.voice_client and not guild.voice_client.is_playing() and added:
+            await self.player.play_next(guild)
+        await interaction.response.edit_message(content=f"🌙 **{label}** • {added} lagu masuk queue.",view=PremiumView(self.player,self.guild_id))
+
+
+class CrossfadeView(discord.ui.View):
+    def __init__(self,player,guild_id):
+        super().__init__(timeout=180)
+        self.player=player; self.guild_id=guild_id
+        options=[discord.SelectOption(label="Off",value="0"),*[
+            discord.SelectOption(label=f"{x} detik",value=str(x)) for x in (2,4,6,8)
+        ]]
+        select=discord.ui.Select(placeholder="Durasi transition...",options=options)
+        select.callback=self.pick
+        self.add_item(select)
+
+    async def pick(self,interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        seconds=float(interaction.data["values"][0])
+        q=self.player.queue_for(self.guild_id)
+        q.crossfade=seconds
+        q.effects_dirty=True
+        guild=self.player.bot.get_guild(self.guild_id)
+        if guild and guild.voice_client and guild.voice_client.is_playing():
+            self.player.restart_current(guild)
+        label="OFF" if seconds==0 else f"{int(seconds)}s"
+        await interaction.response.edit_message(content=f"✨ Crossfade: **{label}**",view=PremiumView(self.player,self.guild_id))

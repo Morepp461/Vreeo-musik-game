@@ -85,12 +85,20 @@ async def _spotify_track_from_url(url):
 
 async def _spotify_items_from_collection(url,kind,limit):
     item_id=urlparse(url).path.rstrip("/").split("/")[-1]
-    data=await _spotify_api(f"{kind}/{item_id}",{"limit":50})
-    if kind=="playlists":
-        items=data.get("tracks",{}).get("items",[])
-    else:
-        items=data.get("tracks",{}).get("items",[])
-    return [x.get("track",x) for x in items if x.get("track",x)] [:limit]
+    endpoint=f"{kind}/{item_id}/tracks"
+    out=[]
+    offset=0
+    while len(out)<limit:
+        data=await _spotify_api(endpoint,{"limit":50,"offset":offset})
+        items=data.get("items",[])
+        if not items: break
+        for item in items:
+            track=item.get("track",item)
+            if track: out.append(track)
+            if len(out)>=limit: break
+        if len(items)<50: break
+        offset+=50
+    return out[:limit]
 
 async def resolve_spotify(query,requested_by):
     parsed=urlparse(query)

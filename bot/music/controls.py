@@ -1,4 +1,31 @@
 import discord
+import time
+def _fmt(s):
+    s=max(0,int(s or 0)); return f"{s//60}:{s%60:02d}"
+
+def build_now_playing_embed(q):
+    t=q.current
+    if not t:
+        return discord.Embed(title="✦ VREEO MUSIC",description="**Nothing is playing.**\nUse `/play` to start.")
+    now=time.monotonic()
+    elapsed=max(0,q.started_offset+(q.paused_at or now)-q.started_at) if q.started_at else q.started_offset
+    duration=t.duration or 0
+    if duration:
+        ratio=min(1,max(0,elapsed/duration)); filled=round(ratio*18)
+        progress=f"`{_fmt(elapsed)}` {'━'*filled+'●'+'━'*(17-filled)} `{_fmt(duration)}`"
+    else: progress=f"`{_fmt(elapsed)}`"
+    status="⏸ PAUSED" if q.paused else "▶ PLAYING"
+    e=discord.Embed(title="✦ VREEO MUSIC  •  NOW PLAYING",description=f"### [{t.title}]({t.webpage_url})\n{progress}\n\n**{status}**")
+    if t.thumbnail: e.set_image(url=t.thumbnail)
+    e.add_field(name="ARTIST / SOURCE",value=f"`{(t.uploader or 'Unknown')[:80]}`",inline=True)
+    e.add_field(name="REQUESTED BY",value=f"<@{t.requested_by}>" if t.requested_by else "-",inline=True)
+    e.add_field(name="QUEUE",value=f"`{len(q.tracks)}`",inline=True)
+    e.add_field(name="VOLUME",value=f"`{int(q.volume*100)}%`",inline=True)
+    e.add_field(name="LOOP",value=f"`{q.loop.upper()}`",inline=True)
+    e.add_field(name="MODE",value=f"`{q.filter.upper()}` • `{q.speed:.2f}x`",inline=True)
+    e.set_footer(text="VREEO MUSIC  •  Premium Player")
+    return e
+
 from . import favorites
 from .guard import can_control
 

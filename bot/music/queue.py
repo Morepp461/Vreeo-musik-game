@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Optional
+import time
 import random
 
 @dataclass
@@ -26,6 +27,8 @@ class GuildQueue:
     filter: str = "off"
     speed: float = 1.0
     replay_current: bool = False
+    started_at: float = 0.0
+    paused_at: float = 0.0
 
     def add(self,track):
         self.tracks.append(track)

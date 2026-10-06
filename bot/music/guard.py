@@ -1,8 +1,15 @@
 import discord
 from ..config import DISCORD_DJ_ROLE_ID,MUSIC_CHANNEL_ID
+from . import settings
 
 def in_music_channel(interaction):
-    return not MUSIC_CHANNEL_ID or interaction.channel_id==MUSIC_CHANNEL_ID
+    channel_id=MUSIC_CHANNEL_ID
+    if not channel_id:
+        try:
+            channel_id=settings.get_channel()
+        except Exception:
+            channel_id=None
+    return not channel_id or interaction.channel_id==int(channel_id)
 
 def is_manager(member):
     if not isinstance(member,discord.Member):

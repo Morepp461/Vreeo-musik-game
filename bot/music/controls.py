@@ -1,6 +1,7 @@
 import asyncio
 import discord
 import time
+import re
 def _fmt(s):
     s=max(0,int(s or 0)); return f"{s//60}:{s%60:02d}"
 
@@ -36,6 +37,7 @@ def build_now_playing_embed(q):
 
 from . import favorites
 from .guard import can_control
+from .lyrics import fetch as fetch_lyrics
 
 async def _kick_autoplay(interaction, player, guild_id):
     guild=player.bot.get_guild(guild_id)
@@ -56,26 +58,73 @@ async def _kick_autoplay(interaction, player, guild_id):
     return True, None
 
 class QueueJumpView(discord.ui.View):
-    def __init__(self, player, guild_id:int):
+    def __init__(self, player, guild_id:int, page:int=0):
         super().__init__(timeout=900)
         self.player=player
         self.guild_id=guild_id
-        q=player.queue_for(guild_id)
-        options=[]
-        for index, track in enumerate(q.tracks[:25]):
-            options.append(discord.SelectOption(label=f"{index+1}. {track.title}"[:100], value=str(index)))
-        if not options:
-            self.add_item(discord.ui.Button(label="Queue kosong", disabled=True))
-            return
-        select=discord.ui.Select(placeholder="Pilih lagu untuk langsung jump...", options=options)
-        select.callback=self.jump
-        self.add_item(select)
+        self.page=max(0,page)
+        self.page_size=8
+        self._build()
 
     @property
     def guild(self):
         return self.player.bot.get_guild(self.guild_id)
 
-    async def jump(self, interaction:discord.Interaction):
+    def _build(self):
+        q=self.player.queue_for(self.guild_id)
+        self.clear_items()
+        total=len(q.tracks)
+        pages=max(1,(total+self.page_size-1)//self.page_size)
+        self.page=min(self.page,max(0,pages-1))
+        start=self.page*self.page_size
+        options=[]
+        for index,track in enumerate(q.tracks[start:start+self.page_size],start+1):
+            options.append(discord.SelectOption(label=f"{index}. {track.title}"[:100],value=str(index-1)))
+        if options:
+            select=discord.ui.Select(placeholder="Pilih lagu untuk langsung jump...",options=options)
+            select.callback=self.jump
+            self.add_item(select)
+        else:
+            self.add_item(discord.ui.Button(label="Queue kosong",disabled=True))
+        prev=discord.ui.Button(label="◀️",style=discord.ButtonStyle.secondary,disabled=self.page<=0,row=1)
+        next_=discord.ui.Button(label="▶️",style=discord.ButtonStyle.secondary,disabled=self.page>=pages-1,row=1)
+        prev.callback=self.previous_page
+        next_.callback=self.next_page
+        self.add_item(prev)
+        self.add_item(next_)
+
+    def embed(self):
+        q=self.player.queue_for(self.guild_id)
+        total=len(q.tracks)
+        pages=max(1,(total+self.page_size-1)//self.page_size)
+        e=discord.Embed(title="✦ VREEO MUSIC  •  QUEUE",description=f"**{total} lagu** • Halaman {self.page+1}/{pages}")
+        start=self.page*self.page_size
+        lines=[]
+        for index,t in enumerate(q.tracks[start:start+self.page_size],start+1):
+            who=f"<@{t.requested_by}>" if t.requested_by else "Autoplay"
+            duration=_fmt(t.duration or 0)
+            lines.append(f"**{index}.** {t.title}\n{duration} • {who}")
+        e.add_field(name="UP NEXT",value="\n\n".join(lines) or "Queue kosong.",inline=False)
+        if q.current:
+            e.set_footer(text=f"Now: {q.current.title[:70]}")
+        else:
+            e.set_footer(text="VREEO MUSIC • Premium Queue")
+        return e
+
+    async def _page(self,interaction,page):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Kamu tidak punya akses kontrol player.",ephemeral=True)
+        self.page=max(0,page)
+        self._build()
+        await interaction.response.edit_message(embed=self.embed(),view=self)
+
+    async def previous_page(self,interaction):
+        await self._page(interaction,self.page-1)
+
+    async def next_page(self,interaction):
+        await self._page(interaction,self.page+1)
+
+    async def jump(self,interaction:discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         if not can_control(interaction.user):
             return await interaction.edit_original_response(content="🔒 Kamu tidak punya akses kontrol player.")

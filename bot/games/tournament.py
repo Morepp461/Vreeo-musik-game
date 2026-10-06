@@ -64,14 +64,35 @@ async def start_tournament(t):
         random.shuffle(ids)
         size = 2 ** math.ceil(math.log2(len(ids)))
         ids += [None] * (size - len(ids))
-        pairs = [(ids[i], ids[i + 1]) for i in range(0, size, 2)]
-        for mn, pair in enumerate(pairs, 1):
-            home, away = pair
-            data = {"tournament_id": t["id"], "round_number": 1, "match_number": mn,
-                    "home_team_id": str(home) if home is not None else None, "away_team_id": str(away) if away is not None else None, "status": "scheduled"}
-            if home is None or away is None:
-                data.update({"home_score": 0, "away_score": 0, "status": "completed"})
-            supabase.table("tournament_matches").insert(data).execute()
+
+        # Build the complete bracket tree up front. For 4 participants this
+        # creates 2 semifinals + 1 TBD final immediately; later rounds are
+        # populated when their feeder matches are completed.
+        current = [(ids[i], ids[i + 1]) for i in range(0, size, 2)]
+        round_number = 1
+        while len(current) >= 1:
+            for mn, pair in enumerate(current, 1):
+                home, away = pair
+                data = {
+                    "tournament_id": t["id"],
+                    "round_number": round_number,
+                    "match_number": mn,
+                    "home_team_id": str(home) if home is not None else None,
+                    "away_team_id": str(away) if away is not None else None,
+                    "status": "scheduled",
+                }
+                if round_number == 1 and (home is None or away is None):
+                    data.update({
+                        "home_score": 0,
+                        "away_score": 0,
+                        "status": "completed",
+                    })
+                supabase.table("tournament_matches").insert(data).execute()
+            if len(current) == 1:
+                break
+            current = [(None, None) for _ in range((len(current) + 1) // 2)]
+            round_number += 1
+
         await create_next_knockout_round(t, 1)
     supabase.table("tournaments").update({"status": "active"}).eq("id", t["id"]).execute()
 

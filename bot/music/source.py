@@ -175,9 +175,12 @@ async def resolve_playlist(url:str,requested_by:int,limit:int=100):
     return entries
 
 def TrackData(info,requested_by):
+    url=info.get("webpage_url") or info.get("url")
+    if url and not str(url).startswith(("http://","https://")):
+        url=f"https://www.youtube.com/watch?v={url}"
     return Track(
         title=info.get("title","Unknown"),
-        webpage_url=info.get("webpage_url") or info.get("url"),
+        webpage_url=url,
         duration=info.get("duration"),
         thumbnail=info.get("thumbnail"),
         uploader=info.get("uploader"),

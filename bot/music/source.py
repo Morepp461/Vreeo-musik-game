@@ -13,6 +13,7 @@ from .queue import Track
 from ..config import SPOTIFY_CLIENT_ID,SPOTIFY_CLIENT_SECRET
 
 POT_PROVIDER_URL=os.getenv("YTDL_POT_PROVIDER_URL","").rstrip("/")
+POT_SCRIPT_HOME=os.getenv("YTDL_POT_SCRIPT_HOME","/opt/bgutil-ytdlp-pot-provider/server")
 BASE={
     "quiet":True,
     "no_warnings":True,
@@ -20,7 +21,8 @@ BASE={
     "format":"bestaudio/best",
     "skip_download":True,
     "extractor_args":{
-        "youtube":{"player_client":["web_embedded"]}
+        "youtube":{"player_client":["mweb"]},
+        "youtubepot-bgutilscript":{"server_home":[POT_SCRIPT_HOME]}
     },
 }
 if POT_PROVIDER_URL:
@@ -443,10 +445,11 @@ async def search(query:str,limit:int=5):
         "ignoreerrors":True,
         "extractor_args":{
             "youtube":{
-                "player_client":["android_vr","web_embedded","tv"]
+                "player_client":["mweb"]
             }
         },
     }
+    opts["extractor_args"]["youtubepot-bgutilscript"]={"server_home":[POT_SCRIPT_HOME]}
     if POT_PROVIDER_URL:
         opts["extractor_args"]["youtubepot-bgutilhttp"]={"base_url":[POT_PROVIDER_URL]}
 

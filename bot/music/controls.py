@@ -542,6 +542,7 @@ class VibeView(discord.ui.View):
     async def pick(self,interaction):
         if not can_control(interaction.user):
             return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        await interaction.response.defer()
         key=interaction.data["values"][0]
         label,queries=premium.MOODS[key]
         q=self.player.queue_for(self.guild_id)
@@ -565,7 +566,7 @@ class VibeView(discord.ui.View):
         guild=self.player.bot.get_guild(self.guild_id)
         if guild and guild.voice_client and not guild.voice_client.is_playing() and added:
             await self.player.play_next(guild)
-        await interaction.response.edit_message(content=f"🌙 **{label}** • {added} lagu masuk queue.",view=PremiumView(self.player,self.guild_id))
+        await interaction.edit_original_response(content=f"🌙 **{label}** • {added} lagu masuk queue.",view=PremiumView(self.player,self.guild_id))
 
 
 class CrossfadeView(discord.ui.View):

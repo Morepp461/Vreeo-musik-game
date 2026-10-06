@@ -38,7 +38,7 @@ class MusicPlayer:
             return await self.play_next(guild)
         source=discord.FFmpegPCMAudio(
             track.stream_url,
-            before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            before_options=f"-ss {q.position:.2f} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             options=f"-vn -af volume={q.volume:.2f}"
         )
         def after(error):
@@ -76,6 +76,7 @@ class MusicPlayer:
         if q.current:
             q.tracks.insert(0,q.current)
         q.current=prev
+        q.position=0
         q.tracks.insert(0,prev)
         self.skip(guild)
         return True

@@ -56,6 +56,7 @@ class MusicPlayer:
             q.played.append(q.current)
             q.played=q.played[-20:]
         q.current=track
+        q.paused=False
         seek_offset=q.position
         q.position=0
         q.started_at=time.monotonic()

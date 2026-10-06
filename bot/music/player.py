@@ -88,9 +88,27 @@ class MusicPlayer:
         await self.ensure_now_playing(guild)
         def after(error): self.bot.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.play_next(guild)))
         try: voice.play(source,after=after)
+            if q.tracks:
+                asyncio.create_task(self._prefetch_next(guild))
         except Exception:
             source.cleanup(); q.current=None; return await self.play_next(guild)
 
+    async def _prefetch_next(self,guild):
+        q=self.queue_for(guild.id)
+        if not q.tracks:
+            return
+        track=q.tracks[0]
+        if track.stream_url:
+            return
+        try:
+            data=await asyncio.wait_for(resolve(track.webpage_url,track.requested_by or 0),timeout=18)
+            track.stream_url=data.get("stream_url") or track.stream_url
+            track.title=data.get("title") or track.title
+            track.duration=data.get("duration") or track.duration
+            track.thumbnail=data.get("thumbnail") or track.thumbnail
+            track.uploader=data.get("uploader") or track.uploader
+        except Exception:
+            pass
     async def disconnect(self,guild):
         q=self.queues.get(guild.id)
         if q: q.always_connected=False

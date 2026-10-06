@@ -1,7 +1,15 @@
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
+
 DISCORD_TOKEN=os.environ["DISCORD_TOKEN"]
 SUPABASE_URL=os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY=os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 DISCORD_GUILD_ID=int(os.getenv("DISCORD_GUILD_ID","0"))
+DISCORD_DJ_ROLE_ID=int(os.getenv("DISCORD_DJ_ROLE_ID","0"))
+MUSIC_CHANNEL_ID=int(os.getenv("MUSIC_CHANNEL_ID","0"))
+SPOTIFY_CLIENT_ID=os.getenv("SPOTIFY_CLIENT_ID","")
+SPOTIFY_CLIENT_SECRET=os.getenv("SPOTIFY_CLIENT_SECRET","")
+MAX_QUEUE_SIZE=int(os.getenv("MAX_QUEUE_SIZE","100"))
+MAX_PLAYLIST_SIZE=int(os.getenv("MAX_PLAYLIST_SIZE","100"))

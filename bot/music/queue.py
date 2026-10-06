@@ -12,6 +12,7 @@ class Track:
     thumbnail: Optional[str] = None
     uploader: Optional[str] = None
     requested_by: Optional[int] = None
+    playback_retries: int = 0
 
 @dataclass
 class GuildQueue:

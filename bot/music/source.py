@@ -1,6 +1,8 @@
 import asyncio
 import base64
+import html
 import os
+import re
 import time
 from urllib.parse import urlparse
 import aiohttp
@@ -75,8 +77,9 @@ def _spotify_url(kind,item_id):
     return f"https://open.spotify.com/{kind}/{item_id}"
 
 def _track_query(item):
-    artists=", ".join(a["name"] for a in item.get("artists",[]))
-    return f"{artists} - {item.get('name','')}"
+    artists=", ".join(a.get("name","") for a in item.get("artists",[]) if a.get("name"))
+    name=item.get("name","")
+    return f"{artists} - {name}" if artists else name
 
 async def spotify_search(query,limit=5):
     data=await _spotify_api("search",{"q":query,"type":"track","limit":min(max(limit,1),10)})
@@ -117,22 +120,65 @@ async def _spotify_track_from_url(url):
             raise
         return await _spotify_oembed_track(url)
 
+async def _spotify_embed_track_ids(url):
+    item_id=urlparse(url).path.rstrip("/").split("/")[-1]
+    embed_url=f"https://open.spotify.com/embed/{'playlist' if '/playlist/' in url else 'album'}/{item_id}"
+    timeout=aiohttp.ClientTimeout(total=15)
+    headers={"User-Agent":"Mozilla/5.0"}
+    async with aiohttp.ClientSession(timeout=timeout,headers=headers) as session:
+        async with session.get(embed_url) as r:
+            if r.status >= 400:
+                raise ValueError(f"Spotify embed error ({r.status}).")
+            page=html.unescape(await r.text())
+    patterns=(
+        r"spotify:track:([A-Za-z0-9]{22})",
+        r"/track/([A-Za-z0-9]{22})",
+    )
+    ids=[]
+    for pattern in patterns:
+        for match in re.findall(pattern,page):
+            if match not in ids:
+                ids.append(match)
+    return ids
+
+async def _spotify_items_from_embed(url,limit):
+    ids=await _spotify_embed_track_ids(url)
+    if not ids:
+        raise ValueError("Spotify playlist tidak bisa dibaca tanpa akses metadata track.")
+    ids=ids[:limit]
+    sem=asyncio.Semaphore(8)
+    async def one(track_id):
+        async with sem:
+            return await _spotify_oembed_track(_spotify_url("track",track_id))
+    results=[]
+    for result in await asyncio.gather(*(one(track_id) for track_id in ids),return_exceptions=True):
+        if isinstance(result,Exception):
+            continue
+        results.append(result)
+    return results
+
 async def _spotify_items_from_collection(url,kind,limit):
     item_id=urlparse(url).path.rstrip("/").split("/")[-1]
     endpoint=f"{kind}/{item_id}/items" if kind=="playlist" else f"{kind}/{item_id}/tracks"
-    out=[]
-    offset=0
-    while len(out)<limit:
-        data=await _spotify_api(endpoint,{"limit":50,"offset":offset})
-        items=data.get("items",[])
-        if not items: break
-        for item in items:
-            track=item.get("track",item)
-            if track: out.append(track)
-            if len(out)>=limit: break
-        if len(items)<50: break
-        offset+=50
-    return out[:limit]
+    try:
+        out=[]
+        offset=0
+        while len(out)<limit:
+            data=await _spotify_api(endpoint,{"limit":50,"offset":offset,"market":"ID"})
+            items=data.get("items",[])
+            if not items: break
+            for item in items:
+                track=item.get("item",item.get("track",item))
+                if track and track.get("type","track")=="track": out.append(track)
+                if len(out)>=limit: break
+            if len(items)<50: break
+            offset+=50
+        if out:
+            return out[:limit]
+    except ValueError as e:
+        if "410" not in str(e) and "403" not in str(e):
+            raise
+    return await _spotify_items_from_embed(url,limit)
 
 async def resolve_spotify(query,requested_by):
     parsed=urlparse(query)
@@ -207,7 +253,8 @@ async def resolve_playlist(url:str,requested_by:int,limit:int=100):
         for item in items:
             try:
                 data=await resolve(_track_query(item),requested_by)
-                data["title"]=f"{item.get('name','Unknown')} — {', '.join(a['name'] for a in item.get('artists',[]))}"
+                artist_names=", ".join(a.get("name","") for a in item.get("artists",[]) if a.get("name"))
+                data["title"]=f"{item.get('name','Unknown')}" + (f" — {artist_names}" if artist_names else "")
                 tracks.append(Track(**data))
             except Exception:
                 continue

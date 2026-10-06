@@ -130,10 +130,14 @@ class Music(commands.Cog):
         await i.response.send_message(embed=emb,view=NowPlayingView(self.player,i.guild.id))
 
     @app_commands.command(name="pause",description="Pause")
-    async def pause(self,i): self.player.pause(i.guild); await i.response.send_message("⏸️")
+    async def pause(self,i):
+        if await reject_manager(i): return
+        self.player.pause(i.guild); await i.response.send_message("⏸️")
 
     @app_commands.command(name="resume",description="Resume")
-    async def resume(self,i): self.player.resume(i.guild); await i.response.send_message("▶️")
+    async def resume(self,i):
+        if await reject_manager(i): return
+        self.player.resume(i.guild); await i.response.send_message("▶️")
 
     @app_commands.command(name="skip",description="Skip")
     async def skip(self,i):
@@ -158,6 +162,7 @@ class Music(commands.Cog):
     @app_commands.command(name="loop",description="Atur loop")
     @app_commands.choices(mode=[app_commands.Choice(name=x,value=x) for x in ("off","track","queue")])
     async def loop(self,i,mode:app_commands.Choice[str]):
+        if await reject_manager(i): return
         self.player.queue_for(i.guild.id).loop=mode.value
         await i.response.send_message(f"🔁 Loop: **{mode.value}**")
 
@@ -347,7 +352,8 @@ class Music(commands.Cog):
         v=await self.voice(i)
         if not v:return await i.response.send_message("Masuk voice channel dulu.",ephemeral=True)
         q=self.player.queue_for(i.guild.id)
-        for r in rows:q.add(Track(title=r["title"],webpage_url=r["source_url"],requested_by=i.user.id))
+        added=rows[:max(0,MAX_QUEUE_SIZE-len(q.tracks))]
+        for r in added:q.add(Track(title=r["title"],webpage_url=r["source_url"],requested_by=i.user.id))
         if not v.is_playing():await self.player.play_next(i.guild)
         await i.response.send_message(f"📚 {len(added)} track masuk queue.")
 

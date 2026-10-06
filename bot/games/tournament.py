@@ -29,7 +29,7 @@ async def reply(interaction, text, ephemeral=True):
 
 
 def can_manage(interaction, t):
-    return interaction.user.id == t["organizer_id"] or interaction.user.guild_permissions.manage_guild
+    return str(interaction.user.id) == str(t["organizer_id"]) or interaction.user.guild_permissions.manage_guild
 
 
 async def embed(t):
@@ -56,7 +56,7 @@ async def start_tournament(t):
             for mn, pair in enumerate(pairs, 1):
                 supabase.table("tournament_matches").insert({
                     "tournament_id": t["id"], "round_number": rn, "match_number": mn,
-                    "home_team_id": pair[0], "away_team_id": pair[1], "status": "scheduled"
+                    "home_team_id": str(pair[0]), "away_team_id": str(pair[1]), "status": "scheduled"
                 }).execute()
     else:
         random.shuffle(ids)
@@ -66,7 +66,7 @@ async def start_tournament(t):
         for mn, pair in enumerate(pairs, 1):
             home, away = pair
             data = {"tournament_id": t["id"], "round_number": 1, "match_number": mn,
-                    "home_team_id": home, "away_team_id": away, "status": "scheduled"}
+                    "home_team_id": str(home) if home is not None else None, "away_team_id": str(away) if away is not None else None, "status": "scheduled"}
             if home is None or away is None:
                 data.update({"home_score": 0, "away_score": 0, "status": "completed"})
             supabase.table("tournament_matches").insert(data).execute()
@@ -88,7 +88,7 @@ async def create_next_knockout_round(t, round_number):
     for mn, pair in enumerate(next_round_pairings(winners), 1):
         supabase.table("tournament_matches").insert({
             "tournament_id": t["id"], "round_number": next_round, "match_number": mn,
-            "home_team_id": pair[0], "away_team_id": pair[1], "status": "scheduled"
+            "home_team_id": str(pair[0]), "away_team_id": str(pair[1]), "status": "scheduled"
         }).execute()
 
 
@@ -252,7 +252,7 @@ class JoinButton(discord.ui.Button):
             return await reply(interaction, "❌ Slot tournament sudah penuh.")
         if rows("tournament_participants", tournament_id=self.tid, user_id=interaction.user.id):
             return await reply(interaction, "ℹ️ Lu sudah terdaftar.")
-        supabase.table("tournament_participants").insert({"tournament_id": self.tid, "user_id": interaction.user.id}).execute()
+        supabase.table("tournament_participants").insert({"tournament_id": self.tid, "user_id": str(interaction.user.id)}).execute()
         await reply(interaction, "✅ Lu berhasil masuk tournament.")
 
 
@@ -273,7 +273,7 @@ class Tournament(commands.Cog):
     async def start(self, interaction, tournament_id: int):
         await interaction.response.defer()
         t = tournament(tournament_id)
-        if not t or t["guild_id"] != interaction.guild_id:
+        if not t or str(t["guild_id"]) != str(interaction.guild_id):
             return await reply(interaction, "❌ Tournament tidak ditemukan.")
         if not can_manage(interaction, t):
             return await reply(interaction, "❌ Hanya organizer / Manage Server.")

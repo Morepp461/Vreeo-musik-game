@@ -1,7 +1,19 @@
 import asyncio
 import discord
-from .source import resolve
 from .queue import Track
+from .source import resolve,search
+from . import history
+
+FILTERS={
+    "off":None,
+    "bassboost":"bass=g=10",
+    "nightcore":"asetrate=44100*1.25,aresample=44100,atempo=1.25",
+    "vaporwave":"asetrate=44100*0.8,aresample=44100,atempo=1.25",
+    "karaoke":"stereotools=mlev=0.03",
+    "8d":"apulsator=hz=0.09",
+    "tremolo":"tremolo=f=8:d=0.7",
+    "rotation":"apulsator=hz=0.125",
+}
 
 class MusicPlayer:
     def __init__(self,bot):
@@ -18,6 +30,14 @@ class MusicPlayer:
         if not voice or voice.is_playing() or voice.is_paused():
             return
         track=q.pop_next()
+        if not track and q.autoplay and q.current:
+            try:
+                results=await search(q.current.title,5)
+                candidate=next((r for r in results if r["webpage_url"] != q.current.webpage_url),None)
+                if candidate:
+                    track=Track(title=candidate["title"],webpage_url=candidate["webpage_url"],duration=candidate.get("duration"),thumbnail=candidate.get("thumbnail"),uploader=candidate.get("uploader"),requested_by=q.current.requested_by)
+            except Exception:
+                track=None
         if not track:
             q.current=None
             q.position=0
@@ -26,21 +46,27 @@ class MusicPlayer:
             q.played.append(q.current)
             q.played=q.played[-20:]
         q.current=track
-        q.position=0
         try:
             data=await resolve(track.webpage_url,track.requested_by or 0)
             track.stream_url=data["stream_url"]
             track.title=data["title"] or track.title
             track.duration=data.get("duration") or track.duration
             track.thumbnail=data.get("thumbnail") or track.thumbnail
-        except Exception as exc:
-            self.bot.logger.warning("stream resolve failed: %s",exc) if hasattr(self.bot,"logger") else None
+        except Exception:
             return await self.play_next(guild)
+        af=[]
+        if FILTERS.get(q.filter): af.append(FILTERS[q.filter])
+        if q.speed != 1.0: af.append(f"atempo={q.speed:.2f}")
+        af.append(f"volume={q.volume:.2f}")
         source=discord.FFmpegPCMAudio(
             track.stream_url,
             before_options=f"-ss {q.position:.2f} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            options=f"-vn -af volume={q.volume:.2f}"
+            options=f"-vn -af {','.join(af)}"
         )
+        try:
+            history.record(track.requested_by or 0,track.title,track.webpage_url)
+        except Exception:
+            pass
         def after(error):
             self.bot.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.play_next(guild)))
         voice.play(source,after=after)
@@ -70,29 +96,25 @@ class MusicPlayer:
 
     def previous(self,guild):
         q=self.queue_for(guild.id)
-        if not q.played:
-            return False
+        if not q.played: return False
         prev=q.played.pop()
-        if q.current:
-            q.tracks.insert(0,q.current)
+        if q.current: q.tracks.insert(0,q.current)
         q.current=prev
         q.position=0
         q.tracks.insert(0,prev)
         self.skip(guild)
         return True
 
-    def seek(self,guild,seconds:float):
+    def seek(self,guild,seconds):
         q=self.queue_for(guild.id)
         if not q.current: return False
-        duration=q.current.duration or 10**9
-        q.position=max(0,min(seconds,duration-0.5 if duration else seconds))
+        duration=q.current.duration
+        q.position=max(0,min(seconds,(duration-0.5) if duration else seconds))
         v=guild.voice_client
-        if v and (v.is_playing() or v.is_paused()):
-            v.stop()
+        if v and (v.is_playing() or v.is_paused()): v.stop()
         return True
 
-    def set_volume(self,guild,value:int):
+    def set_volume(self,guild,value):
         value=max(0,min(150,value))
-        q=self.queue_for(guild.id)
-        q.volume=value/100
+        self.queue_for(guild.id).volume=value/100
         return value

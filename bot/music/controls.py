@@ -24,6 +24,13 @@ def build_now_playing_embed(q):
     e.add_field(name="VOLUME",value=f"`{int(q.volume*100)}%`",inline=True)
     e.add_field(name="LOOP",value=f"`{q.loop.upper()}`",inline=True)
     e.add_field(name="MODE",value=f"`{q.filter.upper()}` • `{q.speed:.2f}x`",inline=True)
+    if q.autoplay_mode=="artist" and q.autoplay_artist:
+        autoplay_label=f"🎤 {q.autoplay_artist[:60]}"
+    elif q.autoplay_mode=="genre":
+        autoplay_label=f"🎚️ {q.autoplay_genre.upper()}"
+    else:
+        autoplay_label="🎲 RANDOM"
+    e.add_field(name="AUTOPLAY",value=f"`{'ON' if q.autoplay else 'OFF'}` • {autoplay_label}",inline=False)
     e.set_footer(text="VREEO MUSIC  •  Premium Player")
     return e
 
@@ -73,6 +80,100 @@ class QueueJumpView(discord.ui.View):
         else:
             asyncio.create_task(self.player.play_next(guild))
         await interaction.edit_original_response(content=f"⏭️ Jump ke **{target.title}**")
+
+
+class ArtistAutoplayModal(discord.ui.Modal, title="🎤 Autoplay by Artist"):
+    artist=discord.ui.TextInput(label="Nama artis",placeholder="Contoh: The Weeknd",max_length=100,required=True)
+
+    def __init__(self, player, guild_id):
+        super().__init__()
+        self.player=player
+        self.guild_id=guild_id
+
+    async def on_submit(self, interaction:discord.Interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        artist=str(self.artist.value).strip()
+        q=self.player.queue_for(self.guild_id)
+        q.autoplay=True
+        q.autoplay_mode="artist"
+        q.autoplay_artist=artist
+        await interaction.response.send_message(f"🎤 Autoplay artist: **{artist}**",ephemeral=True)
+        guild=self.player.bot.get_guild(self.guild_id)
+        if guild: await self.player.refresh_now_playing(guild)
+
+
+class AutoplayView(discord.ui.View):
+    def __init__(self, player, guild_id):
+        super().__init__(timeout=180)
+        self.player=player
+        self.guild_id=guild_id
+        options=[
+            discord.SelectOption(label="🎲 Random",value="random",description="Autoplay bebas dari semua musik"),
+            discord.SelectOption(label="🎚️ Genre",value="genre",description="Pilih genre musik"),
+            discord.SelectOption(label="🎤 Artist",value="artist",description="Autoplay dari artis tertentu"),
+            discord.SelectOption(label="⛔ Off",value="off",description="Matikan autoplay"),
+        ]
+        select=discord.ui.Select(placeholder="Pilih mode autoplay...",options=options)
+        select.callback=self.select_mode
+        self.add_item(select)
+
+    async def select_mode(self, interaction:discord.Interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        value=interaction.data["values"][0]
+        q=self.player.queue_for(self.guild_id)
+        if value=="artist":
+            return await interaction.response.send_modal(ArtistAutoplayModal(self.player,self.guild_id))
+        if value=="genre":
+            return await interaction.response.edit_message(content="🎚️ Pilih genre autoplay:",view=GenreAutoplayView(self.player,self.guild_id))
+        if value=="off":
+            q.autoplay=False
+        else:
+            q.autoplay=True
+            q.autoplay_mode="random"
+            q.autoplay_genre="random"
+            q.autoplay_artist=None
+        await interaction.response.edit_message(content=f"🤖 Autoplay: **{'ON' if q.autoplay else 'OFF'}**",view=NowPlayingView(self.player,self.guild_id))
+        guild=self.player.bot.get_guild(self.guild_id)
+        if guild: await self.player.refresh_now_playing(guild)
+
+
+class GenreAutoplayView(discord.ui.View):
+    def __init__(self, player, guild_id):
+        super().__init__(timeout=180)
+        self.player=player
+        self.guild_id=guild_id
+        genres=[
+            ("Pop","pop"),("Rock","rock"),("R&B / Soul","rnb"),("Hip-Hop / Rap","hiphop"),
+            ("EDM / Electronic","edm"),("Lo-fi / Chill","lofi"),("J-Pop","jpop"),("K-Pop","kpop"),
+            ("Indonesia","indonesia"),("Classical","classical"),("Disco / Funk","disco"),("Jazz","jazz"),("Metal","metal")
+        ]
+        select=discord.ui.Select(placeholder="Pilih genre...",options=[discord.SelectOption(label=a,value=b) for a,b in genres])
+        select.callback=self.select_genre
+        self.add_item(select)
+        back=discord.ui.Button(label="← Kembali",style=discord.ButtonStyle.secondary)
+        back.callback=self.back
+        self.add_item(back)
+
+    async def select_genre(self, interaction:discord.Interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        genre=interaction.data["values"][0]
+        q=self.player.queue_for(self.guild_id)
+        q.autoplay=True
+        q.autoplay_mode="genre"
+        q.autoplay_genre=genre
+        q.autoplay_artist=None
+        await interaction.response.edit_message(content=f"🎚️ Genre autoplay: **{genre.upper()}**",view=NowPlayingView(self.player,self.guild_id))
+        guild=self.player.bot.get_guild(self.guild_id)
+        if guild: await self.player.refresh_now_playing(guild)
+
+    async def back(self, interaction:discord.Interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        await interaction.response.edit_message(content="🤖 Pilih mode autoplay:",view=AutoplayView(self.player,self.guild_id))
+
 
 class NowPlayingView(discord.ui.View):
     def __init__(self,player,guild_id:int):
@@ -141,6 +242,11 @@ class NowPlayingView(discord.ui.View):
         if not await self.guard(interaction): return
         await self.player.disconnect(self.guild)
         await interaction.response.send_message("⏹️ Stop.",ephemeral=True)
+
+    @discord.ui.button(label="🤖 Autoplay",style=discord.ButtonStyle.secondary,row=2)
+    async def autoplay(self,interaction:discord.Interaction,button:discord.ui.Button):
+        if not await self.guard(interaction): return
+        await interaction.response.send_message("🤖 Pilih mode autoplay:",view=AutoplayView(self.player,self.guild_id),ephemeral=True)
 
     @discord.ui.button(emoji="📜",style=discord.ButtonStyle.secondary,row=1)
     async def queue(self,interaction:discord.Interaction,button:discord.ui.Button):

@@ -284,7 +284,7 @@ class Tournament(commands.Cog):
         except ValueError as exc:
             return await reply(interaction, "❌ " + str(exc))
         t = tournament(tournament_id)
-        await interaction.response.send_message(embed=await embed(t), view=Dashboard(t))
+        await interaction.followup.send(embed=await embed(t), view=Dashboard(t))
 
     @tournament.command(name="score", description="Input skor berdasarkan Match ID.")
     async def score(self, interaction, tournament_id: int, match_id: int, home_score: int, away_score: int):

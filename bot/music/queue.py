@@ -29,6 +29,7 @@ class GuildQueue:
     replay_current: bool = False
     started_at: float = 0.0
     paused_at: float = 0.0
+    effects_dirty: bool = False
 
     def add(self,track):
         self.tracks.append(track)

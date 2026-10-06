@@ -46,6 +46,8 @@ class MusicPlayer:
             q.played.append(q.current)
             q.played=q.played[-20:]
         q.current=track
+        seek_offset=q.position
+        q.position=0
         try:
             data=await resolve(track.webpage_url,track.requested_by or 0)
             track.stream_url=data["stream_url"]
@@ -60,7 +62,7 @@ class MusicPlayer:
         af.append(f"volume={q.volume:.2f}")
         source=discord.FFmpegPCMAudio(
             track.stream_url,
-            before_options=f"-ss {q.position:.2f} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            before_options=f"-ss {seek_offset:.2f} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             options=f"-vn -af {','.join(af)}"
         )
         try:

@@ -130,6 +130,7 @@ class MusicPlayer:
                             break
                 recent={t.webpage_url for t in q.played[-20:]}
                 if q.current: recent.add(q.current.webpage_url)
+                recent.update(q.autoplay_failed_urls)
                 current_title=(q.current.title or "").lower() if q.current else ""
                 candidates=music_candidates(results)
                 if mode=="artist" and q.autoplay_artist:
@@ -190,7 +191,11 @@ class MusicPlayer:
                 q.last_error=str(exc)
                 log.exception("Failed to resolve track %s (%s)",track.title,track.webpage_url)
                 q.tracks=[t for t in q.tracks if t is not track]
+                failed_url=track.webpage_url
                 q.current=None
+                if autoplay_generated:
+                    q.autoplay_failed_urls.add(failed_url)
+                    return await self.play_next(guild)
                 if q.tracks:
                     return await self.play_next(guild)
                 await self.refresh_now_playing(guild)

@@ -29,7 +29,11 @@ class MusicPlayer:
         q=self.queue_for(guild.id)
         if not voice or voice.is_playing() or voice.is_paused():
             return
-        track=q.pop_next()
+        if q.replay_current and q.current:
+            track=q.current
+            q.replay_current=False
+        else:
+            track=q.pop_next()
         if not track and q.autoplay and q.current:
             try:
                 results=await search(q.current.title,5)
@@ -133,8 +137,7 @@ class MusicPlayer:
     def restart_current(self,guild):
         q=self.queue_for(guild.id)
         if not q.current: return False
-        if not q.tracks or q.tracks[0] is not q.current:
-            q.tracks.insert(0,q.current)
+        q.replay_current=True
         v=guild.voice_client
         if v and (v.is_playing() or v.is_paused()):
             v.stop()

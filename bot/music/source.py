@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import os
 import time
 from urllib.parse import urlparse
 import aiohttp
@@ -7,6 +8,7 @@ import yt_dlp
 from .queue import Track
 from ..config import SPOTIFY_CLIENT_ID,SPOTIFY_CLIENT_SECRET
 
+POT_PROVIDER_URL=os.getenv("YTDL_POT_PROVIDER_URL","").rstrip("/")
 BASE={
     "quiet":True,
     "no_warnings":True,
@@ -14,6 +16,10 @@ BASE={
     "format":"bestaudio/best",
     "skip_download":True,
 }
+if POT_PROVIDER_URL:
+    BASE["extractor_args"]={
+        "youtubepot-bgutilhttp":{"base_url":[POT_PROVIDER_URL]}
+    }
 _spotify_token=None
 _spotify_expires=0.0
 
@@ -143,6 +149,8 @@ async def search(query:str,limit:int=5):
         except Exception:
             pass
     opts={"quiet":True,"no_warnings":True,"default_search":f"ytsearch{min(max(limit,1),10)}","skip_download":True,"extract_flat":"discard_in_playlist"}
+    if POT_PROVIDER_URL:
+        opts["extractor_args"]={"youtubepot-bgutilhttp":{"base_url":[POT_PROVIDER_URL]}}
     info=await _run(query,opts,20)
     for item in info.get("entries") or []:
         if not item: continue

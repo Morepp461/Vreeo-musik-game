@@ -92,9 +92,30 @@ async def spotify_search(query,limit=5):
         })
     return out
 
+async def _spotify_oembed_track(url):
+    timeout=aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get("https://open.spotify.com/oembed",params={"url":url}) as r:
+            if r.status >= 400:
+                raise ValueError(f"Spotify oEmbed error ({r.status}).")
+            data=await r.json(content_type=None)
+    title=(data.get("title") or "").strip()
+    if not title:
+        raise ValueError("Spotify track metadata tidak ditemukan.")
+    return {
+        "name":title,
+        "artists":[{"name":""}],
+        "album":{"images":[{"url":data.get("thumbnail_url")}]} if data.get("thumbnail_url") else {"images":[]},
+    }
+
 async def _spotify_track_from_url(url):
     item_id=urlparse(url).path.rstrip("/").split("/")[-1]
-    return await _spotify_api(f"tracks/{item_id}", {"market":"ID"})
+    try:
+        return await _spotify_api(f"tracks/{item_id}", {"market":"ID"})
+    except ValueError as e:
+        if "403" not in str(e) or "Active premium subscription required" not in str(e):
+            raise
+        return await _spotify_oembed_track(url)
 
 async def _spotify_items_from_collection(url,kind,limit):
     item_id=urlparse(url).path.rstrip("/").split("/")[-1]
@@ -120,8 +141,10 @@ async def resolve_spotify(query,requested_by):
         item=await _spotify_track_from_url(query)
     else:
         raise ValueError("Spotify URL harus berupa track untuk /play langsung.")
+    artist_names=", ".join(a.get("name","") for a in item.get("artists",[]) if a.get("name"))
+    display_title=f"{item.get('name','Unknown')}" + (f" — {artist_names}" if artist_names else "")
     yt=await resolve(_track_query(item),requested_by)
-    yt["title"]=f"{item.get('name','Unknown')} — {', '.join(a['name'] for a in item.get('artists',[]))}"
+    yt["title"]=display_title
     yt["thumbnail"]=((item.get("album",{}).get("images") or [{}])[0].get("url")) or yt.get("thumbnail")
     return yt
 

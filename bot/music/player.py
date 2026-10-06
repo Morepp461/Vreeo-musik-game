@@ -132,6 +132,9 @@ class MusicPlayer:
                 candidates=music_candidates(results)
                 if mode=="artist" and q.autoplay_artist:
                     candidates=[r for r in candidates if artist_match(r)]
+                # Autoplay is intentionally capped at 8 minutes. Direct member
+                # requests are unaffected by this rule.
+                candidates=[r for r in candidates if not isinstance(r.get("duration"),(int,float)) or r.get("duration") <= 480]
                 candidates=[r for r in candidates if r.get("webpage_url") and r["webpage_url"] not in recent and r.get("title","").lower()!=current_title]
                 # Search metadata can be sparse (especially YouTube's public
                 # fallback), so use a safe music-looking result when the scorer
@@ -147,6 +150,8 @@ class MusicPlayer:
                         if any(word in title for word in ("reaction","podcast","interview","news","tutorial","gameplay","walkthrough","review","commentary","vlog","shorts","livestream","trailer","teaser")):
                             continue
                         if isinstance(duration,(int,float)) and (duration < 20 or duration > 3600):
+                            continue
+                        if isinstance(duration,(int,float)) and duration > 480:
                             continue
                         if mode=="artist" and q.autoplay_artist and not artist_match(r):
                             continue
@@ -190,6 +195,12 @@ class MusicPlayer:
                 return False
             track.stream_url=data.get("stream_url")
             track.stream_headers=data.get("stream_headers") or track.stream_headers
+            if track is q.current and q.autoplay and track.duration and track.duration > 480:
+                q.last_error="Autoplay skipped a track longer than 8 minutes."
+                q.current=None
+                q.position=0
+                await self.refresh_now_playing(guild)
+                return await self.play_next(guild)
         if not track.stream_url:
             q.last_error="Resolver returned no stream URL."
             log.error("Resolver returned no stream URL for %s (%s)",track.title,track.webpage_url)
@@ -208,6 +219,9 @@ class MusicPlayer:
         af=[]
         if FILTERS.get(q.filter): af.append(FILTERS[q.filter])
         if q.speed!=1.0: af.append("atempo=%.2f"%q.speed)
+        if q.crossfade > 0 and track.duration and track.duration > q.crossfade * 2:
+            af.append("afade=t=in:st=0:d=%.2f"%q.crossfade)
+            af.append("afade=t=out:st=%.2f:d=%.2f"%(max(0,track.duration-q.crossfade),q.crossfade))
         af.append("volume=%.2f"%q.volume); q.effects_dirty=False
         headers=track.stream_headers or {}
         header_args=""

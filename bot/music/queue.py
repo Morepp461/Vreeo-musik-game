@@ -22,6 +22,9 @@ class GuildQueue:
     loop: str = "off"
     volume: float = 1.0
     autoplay: bool = False
+    autoplay_mode: str = "random"
+    autoplay_genre: str = "random"
+    autoplay_artist: Optional[str] = None
     always_connected: bool = False
     paused: bool = False
     position: float = 0.0

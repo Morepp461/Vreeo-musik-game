@@ -21,7 +21,7 @@ BASE={
     "format":"bestaudio/best",
     "skip_download":True,
     "extractor_args":{
-        "youtube":{"player_client":["mweb"]},
+        "youtube":{"player_client":["web_embedded"]},
         "youtubepot-bgutilscript":{"server_home":[POT_SCRIPT_HOME]}
     },
 }
@@ -39,7 +39,7 @@ async def _run(query,opts,timeout=25):
 
 async def _run_youtube_with_fallback(query,opts,timeout=25):
     """Keep the existing resolver path, but retry with safer public YouTube clients when one is challenged."""
-    clients=(["mweb","web_embedded","tv"],["web_embedded","tv"],["tv"])
+    clients=(["web_embedded","tv"],["tv"])
     last=None
     for client_list in clients:
         attempt={**opts,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in opts.get("extractor_args",{}).items()}}

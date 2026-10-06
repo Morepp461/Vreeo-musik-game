@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+import logging
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -266,8 +267,15 @@ class Tournament(commands.Cog):
         if not interaction.user.guild_permissions.manage_guild:
             return await reply(interaction, "❌ Butuh Manage Server untuk membuat tournament.")
         await interaction.response.defer()
-        data = supabase.table("tournaments").insert({"guild_id": str(interaction.guild_id), "organizer_id": str(interaction.user.id), "name": name[:80], "format": format.value, "max_participants": max_participants, "status": "registration"}).execute().data[0]
-        await interaction.followup.send(embed=await embed(data), view=JoinView(data["id"]))
+        try:
+            result = supabase.table("tournaments").insert({"guild_id": str(interaction.guild_id), "organizer_id": str(interaction.user.id), "name": name[:80], "format": format.value, "max_participants": max_participants, "status": "registration"}).execute()
+            data = (result.data or [None])[0]
+            if not data:
+                raise RuntimeError("Supabase tidak mengembalikan data tournament.")
+            await interaction.followup.send(embed=await embed(data), view=JoinView(data["id"]))
+        except Exception:
+            logging.exception("Tournament create failed")
+            await interaction.followup.send("❌ Gagal membuat tournament. Cek koneksi/database Supabase.", ephemeral=True)
 
     @tournament.command(name="start", description="Tutup pendaftaran dan auto-generate jadwal/bracket.")
     async def start(self, interaction, tournament_id: int):

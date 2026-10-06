@@ -75,7 +75,7 @@ class Music(commands.Cog):
         if not v: raise ValueError("Masuk voice channel dulu.")
         await i.response.defer()
         if "youtube.com/playlist" in query or "list=" in query:
-            tracks=await resolve_playlist(query,i.user.id)
+            tracks=await resolve_playlist(query,i.user.id,MAX_PLAYLIST_SIZE)
             q=self.player.queue_for(i.guild.id)
             tracks=tracks[:max(0,MAX_QUEUE_SIZE-len(q.tracks))]
             for t in tracks: q.add(t)
@@ -275,9 +275,10 @@ class Music(commands.Cog):
         v=await self.voice(i)
         if not v:return await i.response.send_message("Masuk voice channel dulu.",ephemeral=True)
         q=self.player.queue_for(i.guild.id)
-        for r in rows[:max(0,MAX_QUEUE_SIZE-len(q.tracks))]:q.add(Track(title=r["title"],webpage_url=r["source_url"],requested_by=i.user.id))
+        added=rows[:max(0,MAX_QUEUE_SIZE-len(q.tracks))]
+        for r in added:q.add(Track(title=r["title"],webpage_url=r["source_url"],requested_by=i.user.id))
         if not v.is_playing():await self.player.play_next(i.guild)
-        await i.response.send_message(f"⭐ {len(rows)} favorit masuk queue.")
+        await i.response.send_message(f"⭐ {len(added)} favorit masuk queue.")
 
     settings_group=app_commands.Group(name="settings",description="Pengaturan musik")
 
@@ -348,7 +349,7 @@ class Music(commands.Cog):
         q=self.player.queue_for(i.guild.id)
         for r in rows:q.add(Track(title=r["title"],webpage_url=r["source_url"],requested_by=i.user.id))
         if not v.is_playing():await self.player.play_next(i.guild)
-        await i.response.send_message(f"📚 {len(rows)} track masuk queue.")
+        await i.response.send_message(f"📚 {len(added)} track masuk queue.")
 
 async def setup(bot):
     await bot.add_cog(Music(bot))

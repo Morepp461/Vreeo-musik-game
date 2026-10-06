@@ -1,4 +1,5 @@
 import asyncio
+import time
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -115,9 +116,17 @@ class Music(commands.Cog):
         t=q.current
         emb=discord.Embed(title="🎵 Now Playing",description=f"**{t.title}**",url=t.webpage_url)
         if t.thumbnail: emb.set_thumbnail(url=t.thumbnail)
+        elapsed=max(0,time.monotonic()-q.started_at) if q.started_at else 0
+        duration=t.duration or 0
+        def fmt(seconds):
+            seconds=max(0,int(seconds))
+            return f"{seconds//60}:{seconds%60:02d}"
+        progress=f"{fmt(elapsed)} / {fmt(duration)}" if duration else fmt(elapsed)
+        emb.add_field(name="Progress",value=progress,inline=True)
         emb.add_field(name="Request",value=f"<@{t.requested_by}>" if t.requested_by else "-",inline=True)
         emb.add_field(name="Volume",value=f"{int(q.volume*100)}%",inline=True)
         emb.add_field(name="Loop",value=q.loop,inline=True)
+        emb.add_field(name="Filter",value=q.filter,inline=True)
         await i.response.send_message(embed=emb,view=NowPlayingView(self.player,i.guild.id))
 
     @app_commands.command(name="pause",description="Pause")

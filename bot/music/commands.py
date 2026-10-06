@@ -94,6 +94,8 @@ class Music(commands.Cog):
             data=await resolve(query,i.user.id)
             q=self.player.queue_for(i.guild.id)
             if len(q.tracks)>=MAX_QUEUE_SIZE: raise ValueError("Queue sudah penuh.")
+            if (q.current and q.current.webpage_url==data["webpage_url"]) or any(t.webpage_url==data["webpage_url"] for t in q.tracks):
+                raise ValueError("Track itu sudah ada di queue.")
             q.add(Track(**data))
             text=f"▶️ **{data['title']}** ditambahkan."
             if not v.is_playing(): await self.player.play_next(i.guild)

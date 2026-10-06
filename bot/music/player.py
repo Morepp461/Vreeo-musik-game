@@ -71,13 +71,20 @@ class MusicPlayer:
             q.played.append(q.current); q.played=q.played[-20:]
         q.current=track; q.paused=False; seek_offset=q.position; q.position=0
         q.started_at=time.monotonic(); q.started_offset=seek_offset; q.paused_at=0.0
-        try: data=await resolve(track.webpage_url,track.requested_by or 0)
-        except Exception:
-            q.tracks=[t for t in q.tracks if t is not track]; q.current=None; return await self.play_next(guild)
-        track.stream_url=data.get("stream_url")
+        data=None
+        if not track.stream_url:
+            try:
+                data=await resolve(track.webpage_url,track.requested_by or 0)
+            except Exception:
+                q.tracks=[t for t in q.tracks if t is not track]; q.current=None; return await self.play_next(guild)
+            track.stream_url=data.get("stream_url")
         if not track.stream_url:
             q.tracks=[t for t in q.tracks if t is not track]; q.current=None; return await self.play_next(guild)
-        track.title=data.get("title") or track.title; track.duration=data.get("duration") or track.duration; track.thumbnail=data.get("thumbnail") or track.thumbnail
+        if data:
+            track.title=data.get("title") or track.title
+            track.duration=data.get("duration") or track.duration
+            track.thumbnail=data.get("thumbnail") or track.thumbnail
+            track.uploader=data.get("uploader") or track.uploader
         af=[]
         if FILTERS.get(q.filter): af.append(FILTERS[q.filter])
         if q.speed!=1.0: af.append("atempo=%.2f"%q.speed)
@@ -87,7 +94,8 @@ class MusicPlayer:
         except Exception: pass
         await self.ensure_now_playing(guild)
         def after(error): self.bot.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.play_next(guild)))
-        try: voice.play(source,after=after)
+        try:
+            voice.play(source,after=after)
             if q.tracks:
                 asyncio.create_task(self._prefetch_next(guild))
         except Exception:

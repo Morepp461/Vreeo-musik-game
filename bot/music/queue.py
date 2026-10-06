@@ -7,6 +7,7 @@ class Track:
     title: str
     webpage_url: str
     stream_url: Optional[str] = None
+    stream_headers: Optional[dict] = None
     duration: Optional[float] = None
     thumbnail: Optional[str] = None
     uploader: Optional[str] = None

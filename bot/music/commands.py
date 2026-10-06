@@ -46,6 +46,7 @@ class Music(commands.Cog):
         self.bot=bot
         self.player=MusicPlayer(bot)
         bot.music_player=self.player
+        self.cooldowns={}
 
     @commands.Cog.listener()
     async def on_voice_state_update(self,member,before,after):
@@ -61,6 +62,14 @@ class Music(commands.Cog):
                         await self.player.play_next(member.guild)
                     except Exception:
                         pass
+
+    def rate_limited(self,user_id,command,seconds=2.0):
+        now=time.monotonic()
+        key=(user_id,command)
+        last=self.cooldowns.get(key,0.0)
+        if now-last<seconds: return seconds-(now-last)
+        self.cooldowns[key]=now
+        return 0.0
 
     async def voice(self,i):
         if not i.user.voice: return None
@@ -92,6 +101,8 @@ class Music(commands.Cog):
 
     @app_commands.command(name="play",description="Putar lagu dari URL atau pencarian")
     async def play(self,i,query:str):
+        remaining=self.rate_limited(i.user.id,"play")
+        if remaining: return await i.response.send_message(f"⏳ Tunggu {remaining:.1f} detik.",ephemeral=True)
         try: await self.add_query(i,query)
         except Exception as e:
             if i.response.is_done(): await i.followup.send(f"❌ {e}")
@@ -100,6 +111,8 @@ class Music(commands.Cog):
     @app_commands.command(name="search",description="Cari lagu dan pilih hasil")
     async def search_cmd(self,i,query:str):
         if await reject_channel(i): return
+        remaining=self.rate_limited(i.user.id,"search")
+        if remaining: return await i.response.send_message(f"⏳ Tunggu {remaining:.1f} detik.",ephemeral=True)
         await i.response.defer(ephemeral=True)
         try:
             results=await search(query,5)

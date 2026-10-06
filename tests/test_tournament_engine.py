@@ -22,7 +22,7 @@ def test_standings_score_is_source_of_truth():
     ])
     assert result[0]['team_id'] == 1
     assert result[0]['points'] == 3
-    assert result[1]['team_id'] == 2
+    assert result[1]['team_id'] == 3
     assert result[1]['points'] == 1
 
 

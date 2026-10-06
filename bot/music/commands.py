@@ -1,5 +1,6 @@
 import asyncio
 import time
+import logging
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -11,6 +12,8 @@ from .controls import NowPlayingView,AutoplayView
 from .guard import reject_channel,reject_manager,in_music_channel,can_control
 from . import settings
 from ..config import MAX_QUEUE_SIZE,MAX_PLAYLIST_SIZE
+
+log=logging.getLogger(__name__)
 
 class SearchView(discord.ui.View):
     def __init__(self,cog,interaction,results):
@@ -59,6 +62,57 @@ class Music(commands.Cog):
         self.player=MusicPlayer(bot)
         bot.music_player=self.player
         self.cooldowns={}
+        self._247_locks={}
+        self._247_task=asyncio.create_task(self._247_watchdog())
+
+    async def _247_watchdog(self):
+        while True:
+            try:
+                await asyncio.sleep(15)
+                for guild_id,q in list(self.player.queues.items()):
+                    if not q.always_connected:
+                        continue
+                    guild=self.bot.get_guild(guild_id)
+                    if not guild:
+                        continue
+                    voice=guild.voice_client
+                    if voice and voice.is_connected():
+                        if q.always_channel_id is None and voice.channel:
+                            q.always_channel_id=voice.channel.id
+                        continue
+                    channel=None
+                    if q.always_channel_id:
+                        channel=guild.get_channel(q.always_channel_id)
+                    if channel is None and voice and voice.channel:
+                        channel=voice.channel
+                        q.always_channel_id=channel.id
+                    if channel is None:
+                        continue
+                    lock=self._247_locks.setdefault(guild_id,asyncio.Lock())
+                    if lock.locked():
+                        continue
+                    async with lock:
+                        try:
+                            current=guild.voice_client
+                            if current and current.is_connected():
+                                continue
+                            if current:
+                                try:
+                                    await current.disconnect(force=True)
+                                except Exception:
+                                    pass
+                            await channel.connect()
+                            log.info("24/7 watchdog reconnected voice for guild %s",guild_id)
+                        except Exception as exc:
+                            log.warning("24/7 reconnect failed for guild %s: %s",guild_id,exc)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                log.exception("24/7 watchdog error")
+
+    def cog_unload(self):
+        if self._247_task:
+            self._247_task.cancel()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self,member,before,after):
@@ -67,6 +121,7 @@ class Music(commands.Cog):
         if after.channel is None and before.channel:
             q=self.player.queues.get(member.guild.id)
             if q and q.always_connected:
+                q.always_channel_id=before.channel.id
                 await asyncio.sleep(2)
                 if member.guild.voice_client is None:
                     try:

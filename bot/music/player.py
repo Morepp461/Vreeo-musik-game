@@ -1,10 +1,13 @@
 import asyncio
 import discord
 import time
+import logging
 from .queue import Track
 from .source import resolve,search
 from . import history
 from .controls import NowPlayingView,build_now_playing_embed
+
+log=logging.getLogger(__name__)
 
 FILTERS={"off":None,"bassboost":"bass=g=10","nightcore":"asetrate=44100*1.25,aresample=44100,atempo=1.25","vaporwave":"asetrate=44100*0.8,aresample=44100,atempo=1.25","karaoke":"stereotools=mlev=0.03","8d":"apulsator=hz=0.09","tremolo":"tremolo=f=8:d=0.7","rotation":"apulsator=hz=0.125"}
 
@@ -74,12 +77,26 @@ class MusicPlayer:
         data=None
         if not track.stream_url:
             try:
-                data=await resolve(track.webpage_url,track.requested_by or 0)
-            except Exception:
-                q.tracks=[t for t in q.tracks if t is not track]; q.current=None; return await self.play_next(guild)
+                data=await asyncio.wait_for(resolve(track.webpage_url,track.requested_by or 0),timeout=25)
+            except Exception as exc:
+                q.last_error=str(exc)
+                log.exception("Failed to resolve track %s (%s)",track.title,track.webpage_url)
+                q.tracks=[t for t in q.tracks if t is not track]
+                q.current=None
+                if q.tracks:
+                    return await self.play_next(guild)
+                await self.refresh_now_playing(guild)
+                return False
             track.stream_url=data.get("stream_url")
         if not track.stream_url:
-            q.tracks=[t for t in q.tracks if t is not track]; q.current=None; return await self.play_next(guild)
+            q.last_error="Resolver returned no stream URL."
+            log.error("Resolver returned no stream URL for %s (%s)",track.title,track.webpage_url)
+            q.tracks=[t for t in q.tracks if t is not track]
+            q.current=None
+            if q.tracks:
+                return await self.play_next(guild)
+            await self.refresh_now_playing(guild)
+            return False
         if data:
             track.title=data.get("title") or track.title
             track.duration=data.get("duration") or track.duration
@@ -93,13 +110,24 @@ class MusicPlayer:
         try: history.record(track.requested_by or 0,track.title,track.webpage_url)
         except Exception: pass
         await self.ensure_now_playing(guild)
-        def after(error): self.bot.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.play_next(guild)))
+        def after(error):
+            if error:
+                log.error("Voice player ended with error for %s: %r",track.title,error)
+            self.bot.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.play_next(guild)))
         try:
             voice.play(source,after=after)
+            q.last_error=None
             if q.tracks:
                 asyncio.create_task(self._prefetch_next(guild))
-        except Exception:
-            source.cleanup(); q.current=None; return await self.play_next(guild)
+            return True
+        except Exception as exc:
+            q.last_error=str(exc)
+            log.exception("Voice playback failed for %s",track.title)
+            source.cleanup()
+            q.current=None
+            if q.tracks:
+                return await self.play_next(guild)
+            return False
 
     async def _prefetch_next(self,guild):
         q=self.queue_for(guild.id)

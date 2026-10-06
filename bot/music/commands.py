@@ -190,83 +190,6 @@ class Music(commands.Cog):
             await i.followup.send(text,view=SearchView(self,i,results))
         except Exception as e: await i.followup.send(f"❌ {e}")
 
-    @app_commands.command(name="pause",description="Pause")
-    async def pause(self,i):
-        if await reject_manager(i): return
-        self.player.pause(i.guild); await i.response.send_message("⏸️")
-
-    @app_commands.command(name="resume",description="Resume")
-    async def resume(self,i):
-        if await reject_manager(i): return
-        self.player.resume(i.guild); await i.response.send_message("▶️")
-
-    @app_commands.command(name="skip",description="Skip")
-    async def skip(self,i):
-        if await reject_manager(i): return
-        self.player.skip(i.guild); await i.response.send_message("⏭️")
-
-    @app_commands.command(name="previous",description="Putar lagu sebelumnya")
-    async def previous(self,i):
-        if await reject_manager(i): return
-        await i.response.send_message("⏮️" if self.player.previous(i.guild) else "Tidak ada lagu sebelumnya.")
-
-    @app_commands.command(name="stop",description="Stop dan kosongkan player")
-    async def stop(self,i):
-        if await reject_manager(i): return
-        await self.player.disconnect(i.guild); await i.response.send_message("⏹️")
-
-    @app_commands.command(name="shuffle",description="Acak queue")
-    async def shuffle(self,i):
-        if await reject_manager(i): return
-        self.player.queue_for(i.guild.id).shuffle(); await i.response.send_message("🔀 Queue diacak.")
-
-    @app_commands.command(name="loop",description="Atur loop")
-    @app_commands.choices(mode=[app_commands.Choice(name=x,value=x) for x in ("off","track","queue")])
-    async def loop(self,i,mode:app_commands.Choice[str]):
-        if await reject_manager(i): return
-        self.player.queue_for(i.guild.id).loop=mode.value
-        await i.response.send_message(f"🔁 Loop: **{mode.value}**")
-
-    @app_commands.command(name="volume",description="Atur volume 0-150%")
-    async def volume(self,i,value:app_commands.Range[int,0,150]):
-        if await reject_manager(i): return
-        v=self.player.set_volume(i.guild,value)
-        await i.response.send_message(f"🔊 Volume: **{v}%**")
-
-    @app_commands.command(name="seek",description="Loncat ke posisi, contoh 1:30 atau +30/-15")
-    async def seek(self,i,position:str):
-        if await reject_manager(i): return
-        q=self.player.queue_for(i.guild.id)
-        if not q.current:return await i.response.send_message("Tidak ada lagu.")
-        try:
-            current_pos=max(0,q.started_offset+(q.paused_at or time.monotonic())-q.started_at) if q.started_at and not q.paused else q.position
-            if position.startswith(("+","-")): seconds=max(0,current_pos+float(position))
-            elif ":" in position:
-                m,s=position.split(":",1); seconds=int(m)*60+float(s)
-            else: seconds=float(position)
-            self.player.seek(i.guild,seconds)
-            await i.response.send_message(f"⏩ Seek ke **{int(seconds)//60}:{int(seconds)%60:02d}**")
-        except ValueError: await i.response.send_message("Format seek tidak valid.")
-
-    @app_commands.command(name="filter",description="Atur audio filter")
-    @app_commands.choices(name=[app_commands.Choice(name=x,value=x) for x in ("off","bassboost","nightcore","vaporwave","karaoke","8d","tremolo","rotation")])
-    async def filter_cmd(self,i,name:app_commands.Choice[str]):
-        if await reject_manager(i): return
-        q=self.player.queue_for(i.guild.id)
-        q.filter=name.value
-        q.effects_dirty=True
-        if i.guild.voice_client and i.guild.voice_client.is_playing(): self.player.restart_current(i.guild)
-        await i.response.send_message(f"🎚️ Filter: **{name.value}**")
-
-    @app_commands.command(name="speed",description="Atur kecepatan 0.5x-2x")
-    async def speed(self,i,value:app_commands.Range[float,0.5,2.0]):
-        if await reject_manager(i): return
-        q=self.player.queue_for(i.guild.id)
-        q.speed=float(value)
-        q.effects_dirty=True
-        if i.guild.voice_client and i.guild.voice_client.is_playing(): self.player.restart_current(i.guild)
-        await i.response.send_message(f"⏩ Speed: **{q.speed:.2f}x**")
-
     @app_commands.command(name="autoplay",description="Atur mode autoplay")
     async def autoplay(self,i,enabled:bool):
         if await reject_manager(i): return
@@ -283,53 +206,6 @@ class Music(commands.Cog):
             view=AutoplayView(self.player,i.guild.id),
             ephemeral=True
         )
-
-    @app_commands.command(name="247",description="Pertahankan bot di voice channel")
-    async def always(self,i,enabled:bool):
-        if await reject_manager(i): return
-        self.player.queue_for(i.guild.id).always_connected=enabled
-        await i.response.send_message(f"🔒 24/7: **{'on' if enabled else 'off'}**")
-
-    queue=app_commands.Group(name="queue",description="Kelola queue")
-
-    @queue.command(name="show",description="Lihat queue")
-    async def queue_show(self,i):
-        if await reject_channel(i): return
-        q=self.player.queue_for(i.guild.id)
-        lines=[f"▶️ **{q.current.title}**"] if q.current else []
-        lines += [f"{n}. {t.title}" for n,t in enumerate(q.tracks[:25],1)]
-        await i.response.send_message("\n".join(lines) or "Queue kosong.")
-
-    @queue.command(name="remove",description="Hapus track dari queue")
-    async def queue_remove(self,i,position:app_commands.Range[int,1,100]):
-        if not in_music_channel(i):
-            return await i.response.send_message("🎵 Gunakan channel musik.",ephemeral=True)
-        q=self.player.queue_for(i.guild.id)
-        if position>len(q.tracks): return await i.response.send_message("Posisi tidak ada.")
-        t=q.tracks[position-1]
-        if not can_control(i.user) and t.requested_by!=i.user.id:
-            return await i.response.send_message("🔒 Kamu hanya bisa menghapus lagu milikmu.",ephemeral=True)
-        q.remove(position-1); await i.response.send_message(f"🗑️ {t.title}")
-
-    @queue.command(name="move",description="Pindahkan track")
-    async def queue_move(self,i,from_position:int,to_position:int):
-        if await reject_manager(i): return
-        q=self.player.queue_for(i.guild.id)
-        if not (1<=from_position<=len(q.tracks) and 1<=to_position<=len(q.tracks)): return await i.response.send_message("Posisi tidak valid.")
-        q.move(from_position-1,to_position-1); await i.response.send_message("↕️ Dipindahkan.")
-
-    @queue.command(name="clear",description="Kosongkan queue")
-    async def queue_clear(self,i):
-        if await reject_manager(i): return
-        self.player.queue_for(i.guild.id).clear(); await i.response.send_message("🧹 Queue dikosongkan.")
-
-    @queue.command(name="jump",description="Lompat ke track")
-    async def queue_jump(self,i,position:int):
-        if await reject_manager(i): return
-        q=self.player.queue_for(i.guild.id)
-        if not (1<=position<=len(q.tracks)): return await i.response.send_message("Posisi tidak valid.")
-        for _ in range(position-1): q.played.append(q.tracks.pop(0))
-        self.player.skip(i.guild); await i.response.send_message("⏭️ Jump.")
 
     favorite=app_commands.Group(name="favorite",description="Kelola favorit")
 

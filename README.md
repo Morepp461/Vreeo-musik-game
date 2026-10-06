@@ -3,3 +3,5 @@
 Dedicated Discord bot for one private server.
 
 Music, games, economy, XP, achievements and profiles.
+
+Final music CI validation marker.

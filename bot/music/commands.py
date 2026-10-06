@@ -35,6 +35,8 @@ class SearchView(discord.ui.View):
             q=self.cog.player.queue_for(interaction.guild.id)
             if len(q.tracks)>=MAX_QUEUE_SIZE:
                 return await interaction.response.send_message("Queue sudah penuh.",ephemeral=True)
+            if (q.current and q.current.webpage_url==r["webpage_url"]) or any(t.webpage_url==r["webpage_url"] for t in q.tracks):
+                return await interaction.response.send_message("Track itu sudah ada di queue.",ephemeral=True)
             q.add(Track(title=r["title"],webpage_url=r["webpage_url"],duration=r.get("duration"),thumbnail=r.get("thumbnail"),uploader=r.get("uploader"),requested_by=interaction.user.id))
             await interaction.response.send_message(f"▶️ Ditambahkan: **{r['title']}**",ephemeral=True)
             if not interaction.guild.voice_client.is_playing():

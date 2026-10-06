@@ -199,6 +199,13 @@ class MusicPlayer:
                 q.current=None
                 if q.tracks:
                     return await self.play_next(guild)
+                if q.autoplay and guild.voice_client:
+                    # Autoplay candidates can individually fail YouTube resolution.
+                    # Do not kill autoplay just because one candidate is blocked.
+                    await self.refresh_now_playing(guild)
+                    await asyncio.sleep(1)
+                    if q.autoplay and guild.voice_client and not guild.voice_client.is_playing() and not guild.voice_client.is_paused():
+                        return await self.play_next(guild)
                 await self.refresh_now_playing(guild)
                 return False
             track.stream_url=data.get("stream_url")

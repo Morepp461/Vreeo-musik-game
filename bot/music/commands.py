@@ -118,6 +118,7 @@ class Music(commands.Cog):
 
     @app_commands.command(name="previous",description="Putar lagu sebelumnya")
     async def previous(self,i):
+        if await reject_manager(i): return
         await i.response.send_message("⏮️" if self.player.previous(i.guild) else "Tidak ada lagu sebelumnya.")
 
     @app_commands.command(name="stop",description="Stop dan kosongkan player")
@@ -186,6 +187,7 @@ class Music(commands.Cog):
 
     @queue.command(name="show",description="Lihat queue")
     async def queue_show(self,i):
+        if await reject_channel(i): return
         q=self.player.queue_for(i.guild.id)
         lines=[f"▶️ **{q.current.title}**"] if q.current else []
         lines += [f"{n}. {t.title}" for n,t in enumerate(q.tracks[:25],1)]
@@ -230,10 +232,12 @@ class Music(commands.Cog):
 
     @favorite.command(name="remove",description="Hapus favorit berdasarkan URL")
     async def favorite_remove(self,i,url:str):
+        if await reject_channel(i): return
         favorites.remove(i.user.id,url); await i.response.send_message("⭐ Dihapus.")
 
     @favorite.command(name="list",description="Lihat favorit")
     async def favorite_list(self,i):
+        if await reject_channel(i): return
         rows=favorites.list_all(i.user.id)
         await i.response.send_message("\n".join(f"{n}. {r['title']}" for n,r in enumerate(rows,1))[:1900] or "Favorit kosong.")
 
@@ -262,33 +266,41 @@ class Music(commands.Cog):
 
     @history.command(name="show",description="Lihat riwayat")
     async def history_show(self,i):
+        if await reject_channel(i): return
         rows=history.list_recent(i.user.id)
         await i.response.send_message("\n".join(f"{n}. {r['title']}" for n,r in enumerate(rows,1))[:1900] or "History kosong.")
 
     @history.command(name="clear",description="Hapus riwayat")
-    async def history_clear(self,i): history.clear(i.user.id); await i.response.send_message("🧹 History dihapus.")
+    async def history_clear(self,i):
+        if await reject_channel(i): return
+        history.clear(i.user.id); await i.response.send_message("🧹 History dihapus.")
 
     playlist=app_commands.Group(name="playlist",description="Playlist pribadi")
 
     @playlist.command(name="create",description="Buat playlist")
     async def playlist_create(self,i,name:str):
+        if await reject_channel(i): return
         playlist.create(i.user.id,name); await i.response.send_message(f"📚 Playlist **{name}** dibuat.")
 
     @playlist.command(name="list",description="Daftar playlist")
     async def playlist_list(self,i):
+        if await reject_channel(i): return
         rows=playlist.list_all(i.user.id)
         await i.response.send_message("\n".join(f"• {r['name']}" for r in rows)[:1900] or "Belum ada playlist.")
 
     @playlist.command(name="delete",description="Hapus playlist")
     async def playlist_delete(self,i,name:str):
+        if await reject_channel(i): return
         ok=playlist.delete(i.user.id,name); await i.response.send_message("🗑️ Dihapus." if ok else "Playlist tidak ditemukan.")
 
     @playlist.command(name="rename",description="Ganti nama playlist")
     async def playlist_rename(self,i,old:str,new:str):
+        if await reject_channel(i): return
         ok=playlist.rename(i.user.id,old,new); await i.response.send_message("✏️ Diganti." if ok else "Playlist tidak ditemukan.")
 
     @playlist.command(name="add",description="Tambah lagu ke playlist")
     async def playlist_add(self,i,name:str,query:str):
+        if await reject_channel(i): return
         try:
             t=Track(**(await resolve(query,i.user.id)))
             ok=playlist.add_track(i.user.id,name,t)
@@ -297,6 +309,7 @@ class Music(commands.Cog):
 
     @playlist.command(name="remove",description="Hapus track playlist berdasarkan posisi")
     async def playlist_remove(self,i,name:str,position:int):
+        if await reject_channel(i): return
         ok=playlist.remove_track(i.user.id,name,position); await i.response.send_message("🗑️ Dihapus." if ok else "Track/playlist tidak ditemukan.")
 
     @playlist.command(name="play",description="Putar playlist")

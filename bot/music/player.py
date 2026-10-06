@@ -7,7 +7,6 @@ import random
 from .queue import Track
 from .source import resolve,search,music_candidates
 from . import history
-from .lyrics import fetch as fetch_lyrics
 from .controls import NowPlayingView,build_now_playing_embed
 
 log=logging.getLogger(__name__)

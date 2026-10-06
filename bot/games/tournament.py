@@ -102,6 +102,7 @@ class ScoreModal(discord.ui.Modal, title="Input Skor"):
         self.tournament_id = tournament_id
 
     async def on_submit(self, interaction):
+        await interaction.response.defer(ephemeral=True)
         t = tournament(self.tournament_id)
         if not t or not can_manage(interaction, t):
             return await reply(interaction, "❌ Hanya organizer / Manage Server yang bisa input skor.")
@@ -119,7 +120,7 @@ class ScoreModal(discord.ui.Modal, title="Input Skor"):
         supabase.table("tournament_matches").update({"home_score": hs, "away_score": ass, "status": "completed"}).eq("id", self.match_id).execute()
         if t["format"] == "knockout":
             await create_next_knockout_round(t, match[0]["round_number"])
-        await interaction.response.send_message("✅ Skor tersimpan. Standings/bracket diperbarui.", ephemeral=True)
+        await interaction.followup.send("✅ Skor tersimpan. Standings/bracket diperbarui.", ephemeral=True)
 
 
 class ScoreButton(discord.ui.Button):
@@ -155,8 +156,9 @@ class RefreshButton(discord.ui.Button):
         super().__init__(label="Refresh", emoji="🔄", style=discord.ButtonStyle.secondary)
         self.tid = tid
     async def callback(self, interaction):
+        await interaction.response.defer()
         t = tournament(self.tid)
-        await interaction.response.edit_message(embed=await embed(t), view=Dashboard(t))
+        await interaction.edit_original_response(embed=await embed(t), view=Dashboard(t))
 
 
 class ParticipantsButton(discord.ui.Button):
@@ -164,6 +166,7 @@ class ParticipantsButton(discord.ui.Button):
         super().__init__(label="Participants", emoji="👥", style=discord.ButtonStyle.secondary)
         self.tid = tid
     async def callback(self, interaction):
+        await interaction.response.defer(ephemeral=True)
         ps = rows("tournament_participants", tournament_id=self.tid)
         await reply(interaction, "👥 Participants\n" + ("\n".join("• <@" + str(p["user_id"]) + ">" for p in ps) or "Belum ada peserta."))
 
@@ -173,6 +176,7 @@ class ScheduleButton(discord.ui.Button):
         super().__init__(label="Schedule", emoji="📅", style=discord.ButtonStyle.secondary)
         self.tid = tid
     async def callback(self, interaction):
+        await interaction.response.defer(ephemeral=True)
         ms = sorted(rows("tournament_matches", tournament_id=self.tid), key=lambda m: (m["round_number"], m["match_number"]))
         lines = []
         for m in ms[:50]:
@@ -188,6 +192,7 @@ class StandingsButton(discord.ui.Button):
         super().__init__(label="Standings", emoji="🏆", style=discord.ButtonStyle.primary)
         self.tid = tid
     async def callback(self, interaction):
+        await interaction.response.defer(ephemeral=True)
         ps = rows("tournament_participants", tournament_id=self.tid)
         ms = rows("tournament_matches", tournament_id=self.tid)
         table = standings([p["user_id"] for p in ps], ms)
@@ -202,6 +207,7 @@ class BracketButton(discord.ui.Button):
         super().__init__(label="Bracket", emoji="🧩", style=discord.ButtonStyle.primary)
         self.tid = tid
     async def callback(self, interaction):
+        await interaction.response.defer(ephemeral=True)
         ms = sorted(rows("tournament_matches", tournament_id=self.tid), key=lambda m: (m["round_number"], m["match_number"]))
         lines = []
         for m in ms:
@@ -217,6 +223,7 @@ class ResultsButton(discord.ui.Button):
         super().__init__(label="Results", emoji="📊", style=discord.ButtonStyle.secondary)
         self.tid = tid
     async def callback(self, interaction):
+        await interaction.response.defer(ephemeral=True)
         ms = rows("tournament_matches", tournament_id=self.tid)
         done = [m for m in ms if m["status"] == "completed"]
         lines = []
@@ -236,6 +243,7 @@ class JoinButton(discord.ui.Button):
         super().__init__(label="Join Tournament", emoji="🎟️", style=discord.ButtonStyle.success)
         self.tid = tid
     async def callback(self, interaction):
+        await interaction.response.defer(ephemeral=True)
         t = tournament(self.tid)
         if not t or t["status"] != "registration":
             return await reply(interaction, "❌ Pendaftaran sudah ditutup.")
@@ -257,11 +265,13 @@ class Tournament(commands.Cog):
     async def create(self, interaction, name: str, format: app_commands.Choice[str], max_participants: app_commands.Range[int, 2, 64]):
         if not interaction.user.guild_permissions.manage_guild:
             return await reply(interaction, "❌ Butuh Manage Server untuk membuat tournament.")
+        await interaction.response.defer()
         data = supabase.table("tournaments").insert({"guild_id": interaction.guild_id, "organizer_id": interaction.user.id, "name": name[:80], "format": format.value, "max_participants": max_participants, "status": "registration"}).execute().data[0]
-        await interaction.response.send_message(embed=await embed(data), view=JoinView(data["id"]))
+        await interaction.followup.send(embed=await embed(data), view=JoinView(data["id"]))
 
     @tournament.command(name="start", description="Tutup pendaftaran dan auto-generate jadwal/bracket.")
     async def start(self, interaction, tournament_id: int):
+        await interaction.response.defer()
         t = tournament(tournament_id)
         if not t or t["guild_id"] != interaction.guild_id:
             return await reply(interaction, "❌ Tournament tidak ditemukan.")
@@ -278,6 +288,7 @@ class Tournament(commands.Cog):
 
     @tournament.command(name="score", description="Input skor berdasarkan Match ID.")
     async def score(self, interaction, tournament_id: int, match_id: int, home_score: int, away_score: int):
+        await interaction.response.defer(ephemeral=True)
         t = tournament(tournament_id)
         if not t or t["guild_id"] != interaction.guild_id:
             return await reply(interaction, "❌ Tournament tidak ditemukan.")
@@ -295,14 +306,15 @@ class Tournament(commands.Cog):
         supabase.table("tournament_matches").update({"home_score": home_score, "away_score": away_score, "status": "completed"}).eq("id", match_id).execute()
         if t["format"] == "knockout":
             await create_next_knockout_round(t, match[0]["round_number"])
-        await interaction.response.send_message("✅ Skor tersimpan dan logic tournament diperbarui.", ephemeral=True)
+        await interaction.followup.send("✅ Skor tersimpan dan logic tournament diperbarui.", ephemeral=True)
 
     @tournament.command(name="panel", description="Buka dashboard tournament.")
     async def panel(self, interaction, tournament_id: int):
+        await interaction.response.defer()
         t = tournament(tournament_id)
         if not t or t["guild_id"] != interaction.guild_id:
             return await reply(interaction, "❌ Tournament tidak ditemukan.")
-        await interaction.response.send_message(embed=await embed(t), view=Dashboard(t))
+        await interaction.followup.send(embed=await embed(t), view=Dashboard(t))
 
 
 async def setup(bot):

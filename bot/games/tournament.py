@@ -377,6 +377,61 @@ class ResultsButton(discord.ui.Button):
         await reply(interaction, "📊 Results\n" + ("\n".join(lines) or "Belum ada hasil."))
 
 
+class TournamentNameModal(discord.ui.Modal, title="Nama Peserta"):
+    participant_name = discord.ui.TextInput(
+        label="Nama",
+        placeholder="Masukkan nama peserta (maks. 12 karakter)",
+        min_length=1,
+        max_length=12,
+        required=True,
+    )
+
+    def __init__(self, tid):
+        super().__init__()
+        self.tid = tid
+
+    async def on_submit(self, interaction):
+        await interaction.response.defer(ephemeral=True)
+        t = tournament(self.tid)
+        if not t or t["status"] != "registration":
+            return await reply(interaction, "❌ Pendaftaran sudah ditutup.")
+
+        name = str(self.participant_name.value).strip()
+        if not name:
+            return await reply(interaction, "❌ Nama tidak boleh kosong.")
+        if len(name) > 12:
+            return await reply(interaction, "❌ Nama maksimal 12 karakter termasuk spasi.")
+        if any(ch != " " and not ch.isalpha() for ch in name):
+            return await reply(interaction, "❌ Nama hanya boleh berisi huruf dan spasi. Angka, simbol, dan emote tidak diperbolehkan.")
+
+        ps = rows("tournament_participants", tournament_id=self.tid)
+        if len(ps) >= t["max_participants"]:
+            return await reply(interaction, "❌ Slot tournament sudah penuh.")
+        if rows("tournament_participants", tournament_id=self.tid, user_id=str(interaction.user.id)):
+            return await reply(interaction, "ℹ️ Lu sudah terdaftar.")
+
+        try:
+            supabase.table("tournament_participants").insert({
+                "tournament_id": self.tid,
+                "user_id": str(interaction.user.id),
+                "participant_name": name,
+            }).execute()
+        except Exception:
+            logging.exception("Tournament participant join failed")
+            return await reply(interaction, "❌ Gagal mendaftarkan nama peserta.")
+
+        ps = rows("tournament_participants", tournament_id=self.tid)
+        if len(ps) >= t["max_participants"]:
+            try:
+                await start_tournament(t)
+                await reply(interaction, "✅ Lu berhasil masuk sebagai **" + name + "**. Slot penuh — tournament otomatis dimulai dan jadwal/bracket sudah dibuat.")
+            except Exception:
+                logging.exception("Auto-start tournament failed")
+                await reply(interaction, "✅ Lu berhasil masuk sebagai **" + name + "**, tapi auto-generate jadwal gagal. Organizer bisa jalankan /tournament start.")
+        else:
+            await reply(interaction, "✅ Lu berhasil masuk sebagai **" + name + "**. (" + str(len(ps)) + "/" + str(t["max_participants"]) + ")")
+
+
 class JoinView(discord.ui.View):
     def __init__(self, tid):
         super().__init__(timeout=None)
@@ -387,8 +442,8 @@ class JoinButton(discord.ui.Button):
     def __init__(self, tid):
         super().__init__(label="Join Tournament", emoji="🎟️", style=discord.ButtonStyle.success)
         self.tid = tid
+
     async def callback(self, interaction):
-        await interaction.response.defer(ephemeral=True)
         t = tournament(self.tid)
         if not t or t["status"] != "registration":
             return await reply(interaction, "❌ Pendaftaran sudah ditutup.")
@@ -397,17 +452,7 @@ class JoinButton(discord.ui.Button):
             return await reply(interaction, "❌ Slot tournament sudah penuh.")
         if rows("tournament_participants", tournament_id=self.tid, user_id=str(interaction.user.id)):
             return await reply(interaction, "ℹ️ Lu sudah terdaftar.")
-        supabase.table("tournament_participants").insert({"tournament_id": self.tid, "user_id": str(interaction.user.id)}).execute()
-        ps = rows("tournament_participants", tournament_id=self.tid)
-        if len(ps) >= t["max_participants"]:
-            try:
-                await start_tournament(t)
-                await reply(interaction, "✅ Lu berhasil masuk. Slot penuh — tournament otomatis dimulai dan jadwal/bracket sudah dibuat.")
-            except Exception:
-                logging.exception("Auto-start tournament failed")
-                await reply(interaction, "✅ Lu berhasil masuk, tapi auto-generate jadwal gagal. Organizer bisa jalankan /tournament start.")
-        else:
-            await reply(interaction, "✅ Lu berhasil masuk tournament. (" + str(len(ps)) + "/" + str(t["max_participants"]) + ")")
+        await interaction.response.send_modal(TournamentNameModal(self.tid))
 
 
 class Tournament(commands.Cog):

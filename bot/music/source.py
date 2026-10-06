@@ -305,6 +305,80 @@ async def resolve(query:str,requested_by:int):
         "requested_by":requested_by,
     }
 
+async def _youtube_web_search(query,limit=5):
+    """Fallback search using YouTube's public search page when yt-dlp search is challenged."""
+    url="https://www.youtube.com/results"
+    params={"search_query":query}
+    headers={
+        "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
+        "Accept-Language":"en-US,en;q=0.9",
+    }
+    timeout=aiohttp.ClientTimeout(total=12)
+    async with aiohttp.ClientSession(timeout=timeout,headers=headers) as session:
+        async with session.get(url,params=params) as r:
+            if r.status >= 400:
+                raise ValueError(f"YouTube search HTTP {r.status}.")
+            page=html.unescape(await r.text())
+    marker='var ytInitialData = '
+    start=page.find(marker)
+    if start < 0:
+        raise ValueError("YouTube search metadata tidak ditemukan.")
+    start += len(marker)
+    end=page.find(";</script>",start)
+    if end < 0:
+        end=page.find(";</script",start)
+    if end < 0:
+        raise ValueError("YouTube search metadata rusak.")
+    try:
+        data=json.loads(page[start:end])
+    except Exception as exc:
+        raise ValueError("YouTube search metadata tidak bisa dibaca.") from exc
+
+    out=[]
+    def walk(value):
+        if len(out)>=limit:
+            return
+        if isinstance(value,dict):
+            vr=value.get("videoRenderer")
+            if isinstance(vr,dict) and vr.get("videoId"):
+                video_id=vr["videoId"]
+                title=""
+                runs=((vr.get("title") or {}).get("runs") or [])
+                if runs:
+                    title="".join(str(x.get("text","")) for x in runs)
+                if not title:
+                    title=((vr.get("title") or {}).get("simpleText") or "").strip()
+                if title:
+                    thumbs=vr.get("thumbnail",{}).get("thumbnails") or []
+                    thumb=thumbs[-1].get("url") if thumbs else None
+                    length=((vr.get("lengthText") or {}).get("simpleText"))
+                    seconds=None
+                    if length:
+                        parts=length.split(":")
+                        try:
+                            seconds=sum(int(p)*(60**n) for n,p in enumerate(reversed(parts)))
+                        except Exception:
+                            seconds=None
+                    out.append({
+                        "title":title,
+                        "webpage_url":f"https://www.youtube.com/watch?v={video_id}",
+                        "duration":seconds,
+                        "thumbnail":thumb,
+                        "uploader":None,
+                    })
+                return
+            for child in value.values():
+                walk(child)
+                if len(out)>=limit:
+                    return
+        elif isinstance(value,list):
+            for child in value:
+                walk(child)
+                if len(out)>=limit:
+                    return
+    walk(data)
+    return out
+
 async def search(query:str,limit:int=5):
     limit=min(max(int(limit or 5),1),10)
     results=[]
@@ -317,8 +391,8 @@ async def search(query:str,limit:int=5):
         except Exception as exc:
             log.warning("Spotify search unavailable for %r: %s",query,exc)
 
-    # YouTube is the actual audio source. Keep this path independent from
-    # Spotify so /search still works when Spotify API access is restricted.
+    # YouTube is the actual audio source. Try yt-dlp first, then fall back
+    # to YouTube's public search page when yt-dlp gets a bot/challenge response.
     opts={
         "quiet":True,
         "no_warnings":True,
@@ -336,84 +410,35 @@ async def search(query:str,limit:int=5):
     if POT_PROVIDER_URL:
         opts["extractor_args"]["youtubepot-bgutilhttp"]={"base_url":[POT_PROVIDER_URL]}
 
+    yt_results=[]
     try:
         info=await _run(query,opts,20)
+        for item in info.get("entries") or []:
+            if not item:
+                continue
+            item_url=item.get("webpage_url") or item.get("original_url") or item.get("url")
+            if item_url and not str(item_url).startswith(("http://","https://")):
+                item_url=f"https://www.youtube.com/watch?v={item_url}"
+            if not item_url:
+                continue
+            yt_results.append({
+                "title":item.get("title","Unknown"),
+                "webpage_url":item_url,
+                "duration":item.get("duration"),
+                "thumbnail":item.get("thumbnail"),
+                "uploader":item.get("uploader") or item.get("channel"),
+            })
     except Exception as exc:
-        log.exception("YouTube search failed for %r",query)
-        if results:
-            return results[:limit]
-        raise ValueError(f"Search gagal: {exc}") from exc
+        log.warning("yt-dlp search failed for %r: %s",query,exc)
 
-    for item in info.get("entries") or []:
-        if not item:
-            continue
-        item_url=item.get("webpage_url") or item.get("original_url") or item.get("url")
-        if item_url and not str(item_url).startswith(("http://","https://")):
-            item_url=f"https://www.youtube.com/watch?v={item_url}"
-        if not item_url:
-            continue
-        results.append({
-            "title":item.get("title","Unknown"),
-            "webpage_url":item_url,
-            "duration":item.get("duration"),
-            "thumbnail":item.get("thumbnail"),
-            "uploader":item.get("uploader") or item.get("channel"),
-        })
+    if not yt_results:
+        try:
+            yt_results=await asyncio.wait_for(_youtube_web_search(query,limit),timeout=15)
+        except Exception as exc:
+            log.exception("YouTube web search failed for %r",query)
 
+    results.extend(yt_results)
     if not results:
         raise ValueError("Tidak ada hasil untuk pencarian itu.")
     return results[:limit]
 
-async def resolve_playlist(url:str,requested_by:int,limit:int=100):
-    if is_spotify(url):
-        parsed=urlparse(url)
-        kind=parsed.path.strip("/").split("/")[0]
-        if kind not in {"playlist","album"}:
-            return [Track(**(await resolve(url,requested_by)))]
-
-        items=await asyncio.wait_for(
-            _spotify_items_from_collection(url,kind,limit),
-            timeout=20,
-        )
-        tracks=[]
-        for item in items:
-            track_id=item.get("_spotify_id")
-            if not track_id:
-                continue
-            tracks.append(Track(
-                title=item.get("name","Unknown"),
-                webpage_url=_spotify_url("track",track_id),
-                duration=item.get("duration"),
-                thumbnail=((item.get("album",{}).get("images") or [{}])[0].get("url")),
-                uploader=", ".join(
-                    a.get("name","") for a in item.get("artists",[]) if a.get("name")
-                ),
-                requested_by=requested_by,
-            ))
-        if not tracks:
-            raise ValueError("Spotify playlist kosong atau metadata track tidak tersedia.")
-        return tracks
-
-    opts={**BASE,"noplaylist":False,"extract_flat":"in_playlist"}
-    info=await _run(url,opts,40)
-    entries=[]
-    for item in info.get("entries") or []:
-        if not item: continue
-        entries.append(TrackData(item,requested_by))
-        if len(entries)>=limit: break
-    if not entries:
-        return [Track(**(await resolve(url,requested_by)))]
-    return entries
-
-def TrackData(info,requested_by):
-    url=info.get("webpage_url") or info.get("url")
-    if url and not str(url).startswith(("http://","https://")):
-        url=f"https://www.youtube.com/watch?v={url}"
-    return Track(
-        title=info.get("title","Unknown"),
-        webpage_url=url,
-        duration=info.get("duration"),
-        thumbnail=info.get("thumbnail"),
-        uploader=info.get("uploader"),
-        requested_by=requested_by,
-    )

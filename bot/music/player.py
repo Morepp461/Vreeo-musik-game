@@ -38,7 +38,9 @@ class MusicPlayer:
         if not track and q.autoplay and q.current:
             try:
                 results=await search(q.current.title,5)
-                candidate=next((r for r in results if r["webpage_url"] != q.current.webpage_url),None)
+                recent_urls={t.webpage_url for t in q.played[-10:]}
+                recent_urls.add(q.current.webpage_url)
+                candidate=next((r for r in results if r["webpage_url"] not in recent_urls),None)
                 if candidate:
                     track=Track(title=candidate["title"],webpage_url=candidate["webpage_url"],duration=candidate.get("duration"),thumbnail=candidate.get("thumbnail"),uploader=candidate.get("uploader"),requested_by=q.current.requested_by)
             except Exception:

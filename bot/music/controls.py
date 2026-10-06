@@ -136,5 +136,7 @@ class NowPlayingView(discord.ui.View):
     @discord.ui.button(emoji="📜",style=discord.ButtonStyle.secondary,row=1)
     async def queue(self,interaction:discord.Interaction,button:discord.ui.Button):
         q=self.player.queue_for(self.guild_id)
-        text="\n".join(f"{n}. {t.title}" for n,t in enumerate(q.tracks[:20],1)) or "Queue kosong."
-        await interaction.response.send_message(text[:1900],ephemeral=True)
+        if not q.tracks:
+            return await interaction.response.send_message("Queue kosong.",ephemeral=True)
+        text="\n".join(f"**{n}.** {t.title}" for n,t in enumerate(q.tracks[:25],1))
+        await interaction.response.send_message(f"### 📜 Queue\n{text}",view=QueueJumpView(self.player,self.guild_id),ephemeral=True)

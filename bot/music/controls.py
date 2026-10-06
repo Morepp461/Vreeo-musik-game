@@ -113,6 +113,7 @@ class ArtistAutoplayModal(discord.ui.Modal, title="🎤 Autoplay by Artist"):
             return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
         artist=str(self.artist.value).strip()
         q=self.player.queue_for(self.guild_id)
+        q.panel_channel_id=interaction.channel.id
         q.autoplay=True
         q.autoplay_mode="artist"
         q.autoplay_artist=artist
@@ -145,6 +146,7 @@ class AutoplayView(discord.ui.View):
             return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
         value=interaction.data["values"][0]
         q=self.player.queue_for(self.guild_id)
+        q.panel_channel_id=interaction.channel.id
         if value=="artist":
             return await interaction.response.send_modal(ArtistAutoplayModal(self.player,self.guild_id))
         if value=="genre":
@@ -188,6 +190,7 @@ class GenreAutoplayView(discord.ui.View):
             return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
         genre=interaction.data["values"][0]
         q=self.player.queue_for(self.guild_id)
+        q.panel_channel_id=interaction.channel.id
         q.autoplay=True
         q.autoplay_mode="genre"
         q.autoplay_genre=genre

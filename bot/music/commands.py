@@ -8,7 +8,7 @@ from .queue import Track
 from .player import MusicPlayer
 from . import favorites,history,playlist
 from .controls import NowPlayingView
-from .guard import reject_channel,reject_manager,in_music_channel
+from .guard import reject_channel,reject_manager,in_music_channel,can_control
 from . import settings
 from ..config import MAX_QUEUE_SIZE,MAX_PLAYLIST_SIZE
 
@@ -227,10 +227,14 @@ class Music(commands.Cog):
 
     @queue.command(name="remove",description="Hapus track dari queue")
     async def queue_remove(self,i,position:app_commands.Range[int,1,100]):
-        if await reject_manager(i): return
+        if not in_music_channel(i):
+            return await i.response.send_message("🎵 Gunakan channel musik.",ephemeral=True)
         q=self.player.queue_for(i.guild.id)
         if position>len(q.tracks): return await i.response.send_message("Posisi tidak ada.")
-        t=q.remove(position-1); await i.response.send_message(f"🗑️ {t.title}")
+        t=q.tracks[position-1]
+        if not can_control(i.user) and t.requested_by!=i.user.id:
+            return await i.response.send_message("🔒 Kamu hanya bisa menghapus lagu milikmu.",ephemeral=True)
+        q.remove(position-1); await i.response.send_message(f"🗑️ {t.title}")
 
     @queue.command(name="move",description="Pindahkan track")
     async def queue_move(self,i,from_position:int,to_position:int):

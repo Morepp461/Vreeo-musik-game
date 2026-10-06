@@ -330,7 +330,7 @@ class Music(commands.Cog):
         if await reject_channel(i): return
         try:
             t=Track(**(await resolve(query,i.user.id)))
-            ok=playlist.add_track(i.user.id,name,t)
+            ok=playlist.add_track(i.user.id,name,t,MAX_PLAYLIST_SIZE)
             await i.response.send_message("➕ Ditambahkan." if ok else "Playlist tidak ditemukan.")
         except Exception as e: await i.response.send_message(f"❌ {e}",ephemeral=True)
 

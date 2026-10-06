@@ -269,14 +269,21 @@ async def resolve_playlist(url:str,requested_by:int,limit:int=100):
                 except Exception:
                     return None
 
-        results=await asyncio.gather(
-            *(resolve_item(item) for item in items),
-            return_exceptions=False,
-        )
-        tracks=[track for track in results if track is not None]
-        if not tracks:
-            raise ValueError("Spotify playlist ditemukan, tapi tidak ada track yang berhasil di-resolve.")
-        return tracks
+        tasks=[asyncio.create_task(resolve_item(item)) for item in items]
+        done,pending=await asyncio.wait(tasks,timeout=45)
+        for task in pending:
+            task.cancel()
+        results=[]
+        for task in done:
+            try:
+                track=task.result()
+            except Exception:
+                track=None
+            if track is not None:
+                results.append(track)
+        if not results:
+            raise ValueError("Spotify playlist ditemukan, tapi track tidak selesai di-resolve dalam 45 detik.")
+        return results
     opts={**BASE,"noplaylist":False,"extract_flat":"in_playlist"}
     info=await _run(url,opts,40)
     entries=[]

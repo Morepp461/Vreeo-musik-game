@@ -25,6 +25,7 @@ def build_now_playing_embed(q):
     e.add_field(name="VOLUME",value=f"`{int(q.volume*100)}%`",inline=True)
     e.add_field(name="LOOP",value=f"`{q.loop.upper()}`",inline=True)
     e.add_field(name="MODE",value=f"`{q.filter.upper()}` • `{q.speed:.2f}x`",inline=True)
+    e.add_field(name="CROSSFADE",value=f"`{q.crossfade:.0f}s`",inline=True)
     if q.autoplay_mode=="artist" and q.autoplay_artist:
         autoplay_label=f"🎤 {q.autoplay_artist[:60]}"
     elif q.autoplay_mode=="genre":

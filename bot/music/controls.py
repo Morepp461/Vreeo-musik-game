@@ -587,6 +587,16 @@ class NowPlayingView(discord.ui.View):
         if not await self.guard(interaction): return
         q=self.player.queue_for(self.guild_id)
         q.always_connected=not q.always_connected
+        if q.always_connected:
+            voice=self.guild.voice_client
+            if voice and voice.channel:
+                q.always_channel_id=voice.channel.id
+            else:
+                member=getattr(interaction,"user",None)
+                channel=getattr(getattr(member,"voice",None),"channel",None)
+                q.always_channel_id=channel.id if channel else None
+        else:
+            q.always_channel_id=None
         await interaction.response.send_message(f"🔒 24/7: **{'ON' if q.always_connected else 'OFF'}**",ephemeral=True)
         await self.player.refresh_now_playing(self.guild)
 

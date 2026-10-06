@@ -98,20 +98,57 @@ async def start_tournament(t):
 
 
 async def create_next_knockout_round(t, round_number):
-    current = sorted(rows("tournament_matches", tournament_id=t["id"], round_number=round_number), key=lambda x: x["match_number"])
+    current = sorted(
+        rows("tournament_matches", tournament_id=t["id"], round_number=round_number),
+        key=lambda x: x["match_number"],
+    )
     if not current or not all(m["status"] == "completed" for m in current):
         return
+
     winners = [m["home_team_id"] or m["away_team_id"] for m in current]
     if len(winners) == 1:
         supabase.table("tournaments").update({"status": "completed"}).eq("id", t["id"]).execute()
         return
+
     next_round = round_number + 1
-    if rows("tournament_matches", tournament_id=t["id"], round_number=next_round):
+    next_matches = sorted(
+        rows("tournament_matches", tournament_id=t["id"], round_number=next_round),
+        key=lambda x: x["match_number"],
+    )
+    pairs = next_round_pairings(winners)
+
+    # Future rounds are pre-created as TBD slots. Fill those slots instead
+    # of creating duplicate matches.
+    if next_matches:
+        for match, pair in zip(next_matches, pairs):
+            home, away = pair
+            if match["home_team_id"] is None and home is not None:
+                supabase.table("tournament_matches").update({
+                    "home_team_id": str(home),
+                }).eq("id", match["id"]).execute()
+            if match["away_team_id"] is None and away is not None:
+                supabase.table("tournament_matches").update({
+                    "away_team_id": str(away),
+                }).eq("id", match["id"]).execute()
+
+            # A slot receiving only one team is a bye and advances immediately.
+            if (home is None) != (away is None):
+                supabase.table("tournament_matches").update({
+                    "home_score": 0,
+                    "away_score": 0,
+                    "status": "completed",
+                }).eq("id", match["id"]).execute()
         return
-    for mn, pair in enumerate(next_round_pairings(winners), 1):
+
+    for mn, pair in enumerate(pairs, 1):
+        home, away = pair
         supabase.table("tournament_matches").insert({
-            "tournament_id": t["id"], "round_number": next_round, "match_number": mn,
-            "home_team_id": str(pair[0]), "away_team_id": str(pair[1]), "status": "scheduled"
+            "tournament_id": t["id"],
+            "round_number": next_round,
+            "match_number": mn,
+            "home_team_id": str(home) if home is not None else None,
+            "away_team_id": str(away) if away is not None else None,
+            "status": "scheduled",
         }).execute()
 
 

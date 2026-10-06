@@ -96,6 +96,17 @@ class QueueJumpView(discord.ui.View):
         next_.callback=self.next_page
         self.add_item(prev)
         self.add_item(next_)
+        back=discord.ui.Button(label="↩️ Now Playing",style=discord.ButtonStyle.primary,row=2)
+        back.callback=self.back
+        self.add_item(back)
+
+    async def back(self,interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Kamu tidak punya akses kontrol player.",ephemeral=True)
+        guild=self.guild
+        if not guild:
+            return await interaction.response.send_message("Guild tidak ditemukan.",ephemeral=True)
+        await interaction.response.edit_message(embed=build_now_playing_embed(self.player.queue_for(self.guild_id)),view=NowPlayingView(self.player,self.guild_id))
 
     def embed(self):
         q=self.player.queue_for(self.guild_id)

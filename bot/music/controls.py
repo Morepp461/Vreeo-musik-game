@@ -37,6 +37,24 @@ def build_now_playing_embed(q):
 from . import favorites
 from .guard import can_control
 
+async def _kick_autoplay(interaction, player, guild_id):
+    guild=player.bot.get_guild(guild_id)
+    if not guild:
+        return False, "Guild tidak ditemukan."
+    voice=guild.voice_client
+    if not voice:
+        member=getattr(interaction,"user",None)
+        channel=getattr(getattr(member,"voice",None),"channel",None)
+        if not channel:
+            return False, "Masuk voice channel dulu supaya autoplay bisa mulai."
+        try:
+            voice=await channel.connect()
+        except Exception as exc:
+            return False, f"Gagal masuk voice channel: {exc}"
+    if not voice.is_playing() and not voice.is_paused():
+        await player.play_next(guild)
+    return True, None
+
 class QueueJumpView(discord.ui.View):
     def __init__(self, player, guild_id:int):
         super().__init__(timeout=900)
@@ -98,6 +116,10 @@ class ArtistAutoplayModal(discord.ui.Modal, title="🎤 Autoplay by Artist"):
         q.autoplay=True
         q.autoplay_mode="artist"
         q.autoplay_artist=artist
+        ok,error=await _kick_autoplay(interaction,self.player,self.guild_id)
+        if error:
+            await interaction.response.send_message(f"⚠️ {error}",ephemeral=True)
+            return
         await interaction.response.send_message(f"🎤 Autoplay artist: **{artist}**",ephemeral=True)
         guild=self.player.bot.get_guild(self.guild_id)
         if guild: await self.player.refresh_now_playing(guild)
@@ -134,6 +156,11 @@ class AutoplayView(discord.ui.View):
             q.autoplay_mode="random"
             q.autoplay_genre="random"
             q.autoplay_artist=None
+        if q.autoplay:
+            ok,error=await _kick_autoplay(interaction,self.player,self.guild_id)
+            if error:
+                await interaction.response.edit_message(content=f"⚠️ {error}",view=AutoplayView(self.player,self.guild_id))
+                return
         await interaction.response.edit_message(content=f"🤖 Autoplay: **{'ON' if q.autoplay else 'OFF'}**",view=NowPlayingView(self.player,self.guild_id))
         guild=self.player.bot.get_guild(self.guild_id)
         if guild: await self.player.refresh_now_playing(guild)
@@ -165,6 +192,10 @@ class GenreAutoplayView(discord.ui.View):
         q.autoplay_mode="genre"
         q.autoplay_genre=genre
         q.autoplay_artist=None
+        ok,error=await _kick_autoplay(interaction,self.player,self.guild_id)
+        if error:
+            await interaction.response.edit_message(content=f"⚠️ {error}",view=GenreAutoplayView(self.player,self.guild_id))
+            return
         await interaction.response.edit_message(content=f"🎚️ Genre autoplay: **{genre.upper()}**",view=NowPlayingView(self.player,self.guild_id))
         guild=self.player.bot.get_guild(self.guild_id)
         if guild: await self.player.refresh_now_playing(guild)

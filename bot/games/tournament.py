@@ -144,8 +144,9 @@ class Dashboard(discord.ui.View):
             self.add_item(StandingsButton(t["id"]))
         else:
             self.add_item(BracketButton(t["id"]))
-        for m in rows("tournament_matches", tournament_id=t["id"]):
-            if m["status"] == "scheduled" and m["home_team_id"] and m["away_team_id"]:
+        scheduled = [m for m in rows("tournament_matches", tournament_id=t["id"]) if m["status"] == "scheduled" and m["home_team_id"] and m["away_team_id"]]
+        if len(scheduled) <= 19:
+            for m in scheduled:
                 self.add_item(ScoreButton(m["id"], t["id"]))
 
 

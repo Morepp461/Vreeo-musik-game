@@ -1,5 +1,6 @@
 import asyncio
 import discord
+import time
 from .queue import Track
 from .source import resolve,search
 from . import history
@@ -55,6 +56,8 @@ class MusicPlayer:
         q.current=track
         seek_offset=q.position
         q.position=0
+        q.started_at=time.monotonic()
+        q.paused_at=0.0
         try:
             data=await resolve(track.webpage_url,track.requested_by or 0)
         except Exception:
@@ -107,13 +110,19 @@ class MusicPlayer:
         v=guild.voice_client
         if v and v.is_playing():
             v.pause()
-            self.queue_for(guild.id).paused=True
+            q=self.queue_for(guild.id)
+            q.paused=True
+            q.paused_at=time.monotonic()
 
     def resume(self,guild):
         v=guild.voice_client
         if v and v.is_paused():
             v.resume()
-            self.queue_for(guild.id).paused=False
+            q=self.queue_for(guild.id)
+            if q.paused_at:
+                q.started_at+=time.monotonic()-q.paused_at
+            q.paused=False
+            q.paused_at=0.0
 
     def previous(self,guild):
         q=self.queue_for(guild.id)

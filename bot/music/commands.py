@@ -84,8 +84,9 @@ class Music(commands.Cog):
         return 0.0
 
     async def voice(self,i):
-        if not i.user.voice: return None
-        ch=i.user.voice.channel
+        member=getattr(i,"user",None) or getattr(i,"author",None)
+        if not member or not member.voice: return None
+        ch=member.voice.channel
         v=i.guild.voice_client
         if v and v.channel!=ch:
             await asyncio.wait_for(v.move_to(ch),timeout=12)

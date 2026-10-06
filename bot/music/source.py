@@ -338,6 +338,7 @@ async def resolve(query:str,requested_by:int):
         "title":info.get("title","Unknown"),
         "webpage_url":info.get("webpage_url") or info.get("original_url") or query,
         "stream_url":info.get("url"),
+        "stream_headers":info.get("http_headers") or {},
         "duration":info.get("duration"),
         "thumbnail":info.get("thumbnail"),
         "uploader":info.get("uploader"),

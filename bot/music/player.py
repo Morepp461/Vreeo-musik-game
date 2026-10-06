@@ -2,6 +2,7 @@ import asyncio
 import discord
 import time
 import logging
+import shlex
 from .queue import Track
 from .source import resolve,search
 from . import history
@@ -115,7 +116,7 @@ class MusicPlayer:
                 if hk.lower() in {"user-agent","referer","origin","accept-language"} and hv:
                     header_lines.append(f"{hk}: {hv}")
             if header_lines:
-                header_args=" -headers "+repr("\r\n".join(header_lines)+"\r\n")
+                header_args=" -headers "+shlex.quote("\r\n".join(header_lines)+"\r\n")
         source=discord.FFmpegPCMAudio(track.stream_url,before_options="-ss %.2f -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5%s"%(seek_offset,header_args),options="-vn -af %s"%",".join(af))
         try: history.record(track.requested_by or 0,track.title,track.webpage_url)
         except Exception: pass

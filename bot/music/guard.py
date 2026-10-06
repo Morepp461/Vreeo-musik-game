@@ -1,5 +1,5 @@
 import discord
-from ..config import DISCORD_DJ_ROLE_ID,MUSIC_CHANNEL_ID
+from ..config import MUSIC_CHANNEL_ID
 from . import settings
 
 def in_music_channel(interaction):
@@ -14,12 +14,11 @@ def in_music_channel(interaction):
 def is_manager(member):
     if not isinstance(member,discord.Member):
         return False
-    if member.guild_permissions.administrator or member.guild_permissions.manage_guild:
-        return True
-    return bool(DISCORD_DJ_ROLE_ID and any(role.id==DISCORD_DJ_ROLE_ID for role in member.roles))
+    return bool(member.guild_permissions.administrator or member.guild_permissions.manage_guild)
 
 def can_control(member):
-    return is_manager(member)
+    # Semua member server boleh mengontrol player.
+    return isinstance(member,discord.Member)
 
 async def reject_channel(interaction):
     if in_music_channel(interaction):
@@ -28,10 +27,6 @@ async def reject_channel(interaction):
     return True
 
 async def reject_manager(interaction):
-    if not in_music_channel(interaction):
-        await interaction.response.send_message("🎵 Gunakan music command di channel musik yang sudah disetel.",ephemeral=True)
-        return True
-    if can_control(interaction.user):
-        return False
-    await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
-    return True
+    # Nama fungsi dipertahankan agar command lama tetap kompatibel.
+    # Semua member boleh menjalankan command musik; pembatasan hanya channel.
+    return await reject_channel(interaction)

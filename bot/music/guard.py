@@ -28,6 +28,9 @@ async def reject_channel(interaction):
     return True
 
 async def reject_manager(interaction):
+    if not in_music_channel(interaction):
+        await interaction.response.send_message("🎵 Gunakan music command di channel musik yang sudah disetel.",ephemeral=True)
+        return True
     if can_control(interaction.user):
         return False
     await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)

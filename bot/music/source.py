@@ -145,16 +145,35 @@ async def _spotify_items_from_embed(url,limit):
     ids=await _spotify_embed_track_ids(url)
     if not ids:
         raise ValueError("Spotify playlist tidak bisa dibaca tanpa akses metadata track.")
-    ids=ids[:limit]
-    sem=asyncio.Semaphore(8)
+    ids=ids[:min(limit,50)]
+    sem=asyncio.Semaphore(12)
+
     async def one(track_id):
         async with sem:
-            return await _spotify_oembed_track(_spotify_url("track",track_id))
+            try:
+                item=await asyncio.wait_for(
+                    _spotify_oembed_track(_spotify_url("track",track_id)),
+                    timeout=5,
+                )
+                item["_spotify_id"]=track_id
+                return item
+            except Exception:
+                return None
+
+    tasks=[asyncio.create_task(one(track_id)) for track_id in ids]
+    done,pending=await asyncio.wait(tasks,timeout=12)
+    for task in pending:
+        task.cancel()
     results=[]
-    for result in await asyncio.gather(*(one(track_id) for track_id in ids),return_exceptions=True):
-        if isinstance(result,Exception):
-            continue
-        results.append(result)
+    for task in done:
+        try:
+            item=task.result()
+        except Exception:
+            item=None
+        if item:
+            results.append(item)
+    if not results:
+        raise ValueError("Spotify playlist metadata tidak berhasil dibaca.")
     return results
 
 async def _spotify_items_from_collection(url,kind,limit):
@@ -248,42 +267,30 @@ async def resolve_playlist(url:str,requested_by:int,limit:int=100):
         kind=parsed.path.strip("/").split("/")[0]
         if kind not in {"playlist","album"}:
             return [Track(**(await resolve(url,requested_by)))]
-        items=await _spotify_items_from_collection(url,kind,limit)
+
+        items=await asyncio.wait_for(
+            _spotify_items_from_collection(url,kind,limit),
+            timeout=20,
+        )
         tracks=[]
-        sem=asyncio.Semaphore(5)
+        for item in items:
+            track_id=item.get("_spotify_id")
+            if not track_id:
+                continue
+            tracks.append(Track(
+                title=item.get("name","Unknown"),
+                webpage_url=_spotify_url("track",track_id),
+                duration=item.get("duration"),
+                thumbnail=((item.get("album",{}).get("images") or [{}])[0].get("url")),
+                uploader=", ".join(
+                    a.get("name","") for a in item.get("artists",[]) if a.get("name")
+                ),
+                requested_by=requested_by,
+            ))
+        if not tracks:
+            raise ValueError("Spotify playlist kosong atau metadata track tidak tersedia.")
+        return tracks
 
-        async def resolve_item(item):
-            async with sem:
-                try:
-                    data=await asyncio.wait_for(
-                        resolve(_track_query(item),requested_by),
-                        timeout=20,
-                    )
-                    artist_names=", ".join(
-                        a.get("name","") for a in item.get("artists",[]) if a.get("name")
-                    )
-                    data["title"]=f"{item.get('name','Unknown')}" + (
-                        f" — {artist_names}" if artist_names else ""
-                    )
-                    return Track(**data)
-                except Exception:
-                    return None
-
-        tasks=[asyncio.create_task(resolve_item(item)) for item in items]
-        done,pending=await asyncio.wait(tasks,timeout=45)
-        for task in pending:
-            task.cancel()
-        results=[]
-        for task in done:
-            try:
-                track=task.result()
-            except Exception:
-                track=None
-            if track is not None:
-                results.append(track)
-        if not results:
-            raise ValueError("Spotify playlist ditemukan, tapi track tidak selesai di-resolve dalam 45 detik.")
-        return results
     opts={**BASE,"noplaylist":False,"extract_flat":"in_playlist"}
     info=await _run(url,opts,40)
     entries=[]

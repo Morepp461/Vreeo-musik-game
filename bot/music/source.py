@@ -3,6 +3,7 @@ import base64
 import html
 import os
 import re
+import json
 import time
 from urllib.parse import urlparse
 import aiohttp
@@ -122,59 +123,119 @@ async def _spotify_track_from_url(url):
 
 async def _spotify_embed_track_ids(url):
     item_id=urlparse(url).path.rstrip("/").split("/")[-1]
-    embed_url=f"https://open.spotify.com/embed/{'playlist' if '/playlist/' in url else 'album'}/{item_id}"
+    kind="playlist" if "/playlist/" in url else "album"
+    embed_url=f"https://open.spotify.com/embed/{kind}/{item_id}"
     timeout=aiohttp.ClientTimeout(total=15)
-    headers={"User-Agent":"Mozilla/5.0"}
+    headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36"}
     async with aiohttp.ClientSession(timeout=timeout,headers=headers) as session:
         async with session.get(embed_url) as r:
             if r.status >= 400:
                 raise ValueError(f"Spotify embed error ({r.status}).")
             page=html.unescape(await r.text())
-    patterns=(
-        r"spotify:track:([A-Za-z0-9]{22})",
-        r"/track/([A-Za-z0-9]{22})",
-    )
+
+    match=re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',page,re.S)
+    if match:
+        try:
+            data=json.loads(match.group(1))
+            found=[]
+            def walk(value):
+                if isinstance(value,dict):
+                    track_list=value.get("trackList")
+                    if isinstance(track_list,list):
+                        found.extend(track_list)
+                    for child in value.values():
+                        walk(child)
+                elif isinstance(value,list):
+                    for child in value:
+                        walk(child)
+            walk(data)
+            ids=[]
+            for item in found:
+                uri=item.get("uri") if isinstance(item,dict) else None
+                if isinstance(uri,str) and uri.startswith("spotify:track:"):
+                    track_id=uri.rsplit(":",1)[-1]
+                    if track_id not in ids:
+                        ids.append(track_id)
+            if ids:
+                return ids
+        except Exception:
+            pass
+
+    patterns=(r"spotify:track:([A-Za-z0-9]{22})",r"/track/([A-Za-z0-9]{22})")
     ids=[]
     for pattern in patterns:
-        for match in re.findall(pattern,page):
-            if match not in ids:
-                ids.append(match)
+        for track_id in re.findall(pattern,page):
+            if track_id not in ids:
+                ids.append(track_id)
     return ids
 
 async def _spotify_items_from_embed(url,limit):
-    ids=await _spotify_embed_track_ids(url)
-    if not ids:
-        raise ValueError("Spotify playlist tidak bisa dibaca tanpa akses metadata track.")
-    ids=ids[:min(limit,50)]
-    sem=asyncio.Semaphore(12)
+    item_id=urlparse(url).path.rstrip("/").split("/")[-1]
+    kind="playlist" if "/playlist/" in url else "album"
+    embed_url=f"https://open.spotify.com/embed/{kind}/{item_id}"
+    timeout=aiohttp.ClientTimeout(total=15)
+    headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36"}
+    async with aiohttp.ClientSession(timeout=timeout,headers=headers) as session:
+        async with session.get(embed_url) as r:
+            if r.status >= 400:
+                raise ValueError(f"Spotify embed error ({r.status}).")
+            page=html.unescape(await r.text())
 
-    async def one(track_id):
-        async with sem:
-            try:
-                item=await asyncio.wait_for(
-                    _spotify_oembed_track(_spotify_url("track",track_id)),
-                    timeout=5,
-                )
-                item["_spotify_id"]=track_id
-                return item
-            except Exception:
-                return None
+    match=re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',page,re.S)
+    if not match:
+        raise ValueError("Spotify playlist tidak bisa dibaca tanpa metadata track.")
 
-    tasks=[asyncio.create_task(one(track_id)) for track_id in ids]
-    done,pending=await asyncio.wait(tasks,timeout=12)
-    for task in pending:
-        task.cancel()
+    try:
+        data=json.loads(match.group(1))
+    except Exception as exc:
+        raise ValueError("Metadata Spotify playlist rusak.") from exc
+
+    found=[]
+    def walk(value):
+        if isinstance(value,dict):
+            track_list=value.get("trackList")
+            if isinstance(track_list,list):
+                found.extend(track_list)
+            for child in value.values():
+                walk(child)
+        elif isinstance(value,list):
+            for child in value:
+                walk(child)
+    walk(data)
+
     results=[]
-    for task in done:
-        try:
-            item=task.result()
-        except Exception:
-            item=None
-        if item:
-            results.append(item)
-    if not results:
-        raise ValueError("Spotify playlist metadata tidak berhasil dibaca.")
-    return results
+    seen=set()
+    for item in found:
+        if not isinstance(item,dict):
+            continue
+        uri=item.get("uri") or ""
+        if not isinstance(uri,str) or not uri.startswith("spotify:track:"):
+            continue
+        track_id=uri.rsplit(":",1)[-1]
+        if track_id in seen:
+            continue
+        title=(item.get("title") or item.get("name") or "").strip()
+        if not title:
+            continue
+        seen.add(track_id)
+        subtitle=(item.get("subtitle") or "").strip()
+        duration=item.get("duration")
+        if isinstance(duration,(int,float)):
+            duration=float(duration)/1000 if duration>10000 else float(duration)
+        results.append({
+            "name":title,
+            "artists":[{"name":subtitle}] if subtitle else [],
+            "album":{"images":[]},
+            "duration":duration,
+            "_spotify_id":track_id,
+        })
+        if len(results)>=min(limit,100):
+            break
+
+    if results:
+        return results
+
+    raise ValueError("Spotify playlist tidak bisa dibaca tanpa metadata track.")
 
 async def _spotify_items_from_collection(url,kind,limit):
     # Playlist API Spotify saat ini bisa menolak public playlist untuk app

@@ -41,7 +41,7 @@ class SearchView(discord.ui.View):
             q.add(Track(title=r["title"],webpage_url=r["webpage_url"],duration=r.get("duration"),thumbnail=r.get("thumbnail"),uploader=r.get("uploader"),requested_by=interaction.user.id))
             await interaction.response.send_message(f"▶️ Ditambahkan: **{r['title']}**",ephemeral=True)
             if not interaction.guild.voice_client.is_playing():
-                await self.cog.player.play_next(interaction.guild)
+                asyncio.create_task(self.cog.player.play_next(interaction.guild))
         return callback
 
 class Music(commands.Cog):
@@ -93,7 +93,6 @@ class Music(commands.Cog):
             tracks=tracks[:max(0,MAX_QUEUE_SIZE-len(q.tracks))]
             for t in tracks: q.add(t)
             text=f"📚 **{len(tracks)}** track masuk queue."
-            if not v.is_playing(): await self.player.play_next(i.guild)
         else:
             data=await resolve(query,i.user.id)
             q=self.player.queue_for(i.guild.id)
@@ -103,8 +102,9 @@ class Music(commands.Cog):
                 raise ValueError("Track itu sudah ada di queue.")
             q.add(Track(**data))
             text=f"▶️ **{data['title']}** ditambahkan."
-            if not v.is_playing(): await self.player.play_next(i.guild)
         await i.followup.send(text)
+        if not v.is_playing():
+            asyncio.create_task(self.player.play_next(i.guild))
 
     @app_commands.command(name="play",description="Putar lagu dari URL atau pencarian")
     async def play(self,i,query:str):

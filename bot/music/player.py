@@ -83,21 +83,27 @@ class MusicPlayer:
                 mode=q.autoplay_mode or "random"
                 if mode=="artist" and q.autoplay_artist:
                     artist=q.autoplay_artist.strip()
-                    query=random.choice((f"{artist} songs",f"{artist} official songs",f"{artist} music"))
+                    artist_tokens=[x for x in artist.lower().replace("-"," ").split() if len(x)>2]
+                    def artist_match(r):
+                        text=f"{r.get('title','')} {r.get('uploader','') or r.get('channel','')}".lower()
+                        return bool(artist_tokens) and all(token in text for token in artist_tokens)
+                    queries=(f"{artist} songs",f"{artist} official songs",f"{artist} music")
+                    random.shuffle(list(queries))
+                    results=[]
+                    for query in queries:
+                        found=await search(query,10)
+                        results.extend(found)
+                        if any(artist_match(r) for r in music_candidates(found)):
+                            break
                 else:
                     genre=q.autoplay_genre if mode=="genre" else "random"
                     query=random.choice(genre_queries.get(genre,genre_queries["random"]))
-                results=await search(query,10)
+                    results=await search(query,10)
                 recent={t.webpage_url for t in q.played[-20:]}; recent.add(q.current.webpage_url)
                 current_title=(q.current.title or "").lower()
                 candidates=music_candidates(results)
                 if mode=="artist" and q.autoplay_artist:
-                    artist_tokens=[x for x in q.autoplay_artist.lower().replace("-"," ").split() if len(x)>2]
-                    def artist_match(r):
-                        text=f"{r.get('title','')} {r.get('uploader','') or r.get('channel','')}".lower()
-                        return bool(artist_tokens) and all(token in text for token in artist_tokens)
-                    matched=[r for r in candidates if artist_match(r)]
-                    candidates=matched or candidates
+                    candidates=[r for r in candidates if artist_match(r)]
                 candidates=[r for r in candidates if r["webpage_url"] not in recent and r.get("title","").lower()!=current_title]
                 random.shuffle(candidates)
                 candidate=candidates[0] if candidates else None

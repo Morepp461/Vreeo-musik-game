@@ -97,24 +97,62 @@ class MusicPlayer:
                             break
                 else:
                     genre=q.autoplay_genre if mode=="genre" else "random"
-                    query=random.choice(genre_queries.get(genre,genre_queries["random"]))
-                    results=await search(query,10)
+                    queries=list(genre_queries.get(genre,genre_queries["random"]))
+                    random.shuffle(queries)
+                    results=[]
+                    # Try several queries: a single weak/blocked YouTube search must
+                    # never make autoplay silently die.
+                    for query in queries[:4]:
+                        try:
+                            found=await search(query,10)
+                        except Exception as exc:
+                            log.warning("Autoplay search failed for %r: %s",query,exc)
+                            continue
+                        results.extend(found)
+                        if music_candidates(found):
+                            break
                 recent={t.webpage_url for t in q.played[-20:]}
                 if q.current: recent.add(q.current.webpage_url)
                 current_title=(q.current.title or "").lower() if q.current else ""
                 candidates=music_candidates(results)
                 if mode=="artist" and q.autoplay_artist:
                     candidates=[r for r in candidates if artist_match(r)]
-                candidates=[r for r in candidates if r["webpage_url"] not in recent and r.get("title","").lower()!=current_title]
-                random.shuffle(candidates)
+                candidates=[r for r in candidates if r.get("webpage_url") and r["webpage_url"] not in recent and r.get("title","").lower()!=current_title]
+                # Search metadata can be sparse (especially YouTube's public
+                # fallback), so use a safe music-looking result when the scorer
+                # rejects everything instead of returning "no track".
+                if not candidates:
+                    fallback=[]
+                    for r in results:
+                        title=str(r.get("title") or "").lower()
+                        url=r.get("webpage_url")
+                        duration=r.get("duration")
+                        if not url or url in recent or title==current_title:
+                            continue
+                        if any(word in title for word in ("reaction","podcast","interview","news","tutorial","gameplay","walkthrough","review","commentary","vlog","shorts","livestream","trailer","teaser")):
+                            continue
+                        if isinstance(duration,(int,float)) and (duration < 20 or duration > 3600):
+                            continue
+                        if mode=="artist" and q.autoplay_artist and not artist_match(r):
+                            continue
+                        fallback.append(r)
+                    random.shuffle(fallback)
+                    candidates=fallback
                 candidate=candidates[0] if candidates else None
                 if candidate:
                     track=Track(title=candidate["title"],webpage_url=candidate["webpage_url"],duration=candidate.get("duration"),thumbnail=candidate.get("thumbnail"),uploader=candidate.get("uploader"),requested_by=q.current.requested_by if q.current else 0)
-            except Exception:
+            except Exception as exc:
+                log.exception("Autoplay generation failed: %s",exc)
                 track=None
         if not track:
             q.current=None; q.position=0
             await self.refresh_now_playing(guild)
+            if q.autoplay and guild.voice_client:
+                # Keep the 24/7 voice connection alive and retry instead of
+                # flashing the player for a moment and then dropping it.
+                await asyncio.sleep(3)
+                if q.autoplay and guild.voice_client and not guild.voice_client.is_playing() and not guild.voice_client.is_paused():
+                    return await self.play_next(guild)
             if not q.always_connected and guild.voice_client:
                 await guild.voice_client.disconnect(force=True); self.queues.pop(guild.id,None)
             return

@@ -3,6 +3,7 @@ import discord
 import time
 import logging
 import shlex
+import random
 from .queue import Track
 from .source import resolve,search,music_candidates
 from . import history
@@ -63,10 +64,14 @@ class MusicPlayer:
             track.playback_retries=0
         if not track and q.autoplay and q.current:
             try:
-                results=await search(q.current.title,10)
-                recent={t.webpage_url for t in q.played[-10:]}; recent.add(q.current.webpage_url)
-                candidates=music_candidates(results)
-                candidate=next((r for r in candidates if r["webpage_url"] not in recent),None)
+                autoplay_queries=("popular songs","best pop songs","latest music","indie music","r&b songs","dance music","chill music","rock songs","electronic music","top songs")
+                query=random.choice(autoplay_queries)
+                results=await search(query,10)
+                recent={t.webpage_url for t in q.played[-20:]}; recent.add(q.current.webpage_url)
+                current_title=(q.current.title or "").lower()
+                candidates=[r for r in music_candidates(results) if r["webpage_url"] not in recent and r.get("title","").lower()!=current_title]
+                random.shuffle(candidates)
+                candidate=candidates[0] if candidates else None
                 if candidate:
                     track=Track(title=candidate["title"],webpage_url=candidate["webpage_url"],duration=candidate.get("duration"),thumbnail=candidate.get("thumbnail"),uploader=candidate.get("uploader"),requested_by=q.current.requested_by)
             except Exception: track=None

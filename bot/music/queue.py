@@ -28,6 +28,7 @@ class GuildQueue:
     speed: float = 1.0
     replay_current: bool = False
     started_at: float = 0.0
+    started_offset: float = 0.0
     paused_at: float = 0.0
     effects_dirty: bool = False
 

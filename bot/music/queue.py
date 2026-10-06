@@ -36,6 +36,7 @@ class GuildQueue:
     paused_at: float = 0.0
     effects_dirty: bool = False
     crossfade: float = 0.0
+    autoplay_failed_urls: set = field(default_factory=set)
     last_error: Optional[str] = None
     panel_channel_id: Optional[int] = None
     panel_message_id: Optional[int] = None

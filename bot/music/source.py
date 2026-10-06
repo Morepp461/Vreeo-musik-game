@@ -421,6 +421,34 @@ async def _youtube_web_search(query,limit=5):
     walk(data)
     return out
 
+
+_MUSIC_POSITIVE=("official audio","official music video","official video","lyrics","lyric video","audio","topic")
+_MUSIC_NEGATIVE=("reaction","reacts","podcast","interview","news","tutorial","gameplay","walkthrough","review","commentary","vlog","shorts","short video","livestream","live stream","stream replay","trailer","teaser")
+
+def music_score(result):
+    """Score a YouTube search result for autoplay; conservative and metadata-only."""
+    title=str(result.get("title") or "").strip().lower()
+    uploader=str(result.get("uploader") or result.get("channel") or "").strip().lower()
+    text=f"{title} {uploader}".strip()
+    score=0
+    for word in _MUSIC_POSITIVE:
+        if word in text: score+=12
+    for word in _MUSIC_NEGATIVE:
+        if word in text: score-=35
+    if " - " in title or " – " in title or " — " in title: score+=8
+    duration=result.get("duration")
+    if isinstance(duration,(int,float)):
+        if 60 <= duration <= 900: score+=8
+        elif duration < 20: score-=20
+        elif duration > 3600: score-=25
+    if uploader.endswith(" - topic") or uploader.endswith(" topic"): score+=20
+    return score
+
+def music_candidates(results,min_score=10):
+    """Return likely music candidates, strongest first, without changing normal search behavior."""
+    ranked=sorted(results,key=music_score,reverse=True)
+    return [r for r in ranked if music_score(r)>=min_score]
+
 async def search(query:str,limit:int=5):
     limit=min(max(int(limit or 5),1),10)
     results=[]

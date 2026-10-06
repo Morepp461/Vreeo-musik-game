@@ -87,8 +87,8 @@ class MusicPlayer:
                     def artist_match(r):
                         text=f"{r.get('title','')} {r.get('uploader','') or r.get('channel','')}".lower()
                         return bool(artist_tokens) and all(token in text for token in artist_tokens)
-                    queries=(f"{artist} songs",f"{artist} official songs",f"{artist} music")
-                    random.shuffle(list(queries))
+                    queries=[f"{artist} songs",f"{artist} official songs",f"{artist} music"]
+                    random.shuffle(queries)
                     results=[]
                     for query in queries:
                         found=await search(query,10)

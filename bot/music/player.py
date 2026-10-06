@@ -88,6 +88,7 @@ class MusicPlayer:
                 await self.refresh_now_playing(guild)
                 return False
             track.stream_url=data.get("stream_url")
+            track.stream_headers=data.get("stream_headers") or track.stream_headers
         if not track.stream_url:
             q.last_error="Resolver returned no stream URL."
             log.error("Resolver returned no stream URL for %s (%s)",track.title,track.webpage_url)
@@ -106,7 +107,16 @@ class MusicPlayer:
         if FILTERS.get(q.filter): af.append(FILTERS[q.filter])
         if q.speed!=1.0: af.append("atempo=%.2f"%q.speed)
         af.append("volume=%.2f"%q.volume); q.effects_dirty=False
-        source=discord.FFmpegPCMAudio(track.stream_url,before_options="-ss %.2f -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"%seek_offset,options="-vn -af %s"%",".join(af))
+        headers=track.stream_headers or {}
+        header_args=""
+        if headers:
+            header_lines=[]
+            for hk,hv in headers.items():
+                if hk.lower() in {"user-agent","referer","origin","accept-language"} and hv:
+                    header_lines.append(f"{hk}: {hv}")
+            if header_lines:
+                header_args=" -headers "+repr("\r\n".join(header_lines)+"\r\n")
+        source=discord.FFmpegPCMAudio(track.stream_url,before_options="-ss %.2f -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5%s"%(seek_offset,header_args),options="-vn -af %s"%",".join(af))
         try: history.record(track.requested_by or 0,track.title,track.webpage_url)
         except Exception: pass
         await self.ensure_now_playing(guild)
@@ -139,6 +149,7 @@ class MusicPlayer:
         try:
             data=await asyncio.wait_for(resolve(track.webpage_url,track.requested_by or 0),timeout=18)
             track.stream_url=data.get("stream_url") or track.stream_url
+            track.stream_headers=data.get("stream_headers") or track.stream_headers
             track.title=data.get("title") or track.title
             track.duration=data.get("duration") or track.duration
             track.thumbnail=data.get("thumbnail") or track.thumbnail

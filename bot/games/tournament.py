@@ -42,6 +42,7 @@ async def embed(t):
     e.add_field(name="Progress", value=str(done) + "/" + str(len(ms)) + " matches completed" if ms else "Schedule belum dibuat.", inline=False)
     if t["format"] == "league":
         e.add_field(name="Scoring", value="Win 3 • Draw 1 • Loss 0", inline=False)
+    e.add_field(name="Tournament ID", value="`" + str(t["id"]) + "`", inline=False)
     return e
 
 
@@ -251,7 +252,7 @@ class JoinButton(discord.ui.Button):
         ps = rows("tournament_participants", tournament_id=self.tid)
         if len(ps) >= t["max_participants"]:
             return await reply(interaction, "❌ Slot tournament sudah penuh.")
-        if rows("tournament_participants", tournament_id=self.tid, user_id=interaction.user.id):
+        if rows("tournament_participants", tournament_id=self.tid, user_id=str(interaction.user.id)):
             return await reply(interaction, "ℹ️ Lu sudah terdaftar.")
         supabase.table("tournament_participants").insert({"tournament_id": self.tid, "user_id": str(interaction.user.id)}).execute()
         await reply(interaction, "✅ Lu berhasil masuk tournament.")
@@ -276,6 +277,49 @@ class Tournament(commands.Cog):
         except Exception:
             logging.exception("Tournament create failed")
             await interaction.followup.send("❌ Gagal membuat tournament. Cek koneksi/database Supabase.", ephemeral=True)
+
+    @tournament.command(name="add", description="Tambahkan peserta secara manual.")
+    @app_commands.describe(tournament_id="ID tournament", member="Member Discord yang ditambahkan")
+    async def add(self, interaction, tournament_id: int, member: discord.Member):
+        await interaction.response.defer(ephemeral=True)
+        t = tournament(tournament_id)
+        if not t or str(t["guild_id"]) != str(interaction.guild_id):
+            return await reply(interaction, "❌ Tournament tidak ditemukan.")
+        if not can_manage(interaction, t):
+            return await reply(interaction, "❌ Hanya organizer / Manage Server.")
+        if t["status"] != "registration":
+            return await reply(interaction, "❌ Peserta hanya bisa ditambahkan saat fase pendaftaran.")
+        ps = rows("tournament_participants", tournament_id=tournament_id)
+        if len(ps) >= t["max_participants"]:
+            return await reply(interaction, "❌ Slot tournament sudah penuh.")
+        if rows("tournament_participants", tournament_id=tournament_id, user_id=str(member.id)):
+            return await reply(interaction, "ℹ️ Member itu sudah terdaftar.")
+        try:
+            supabase.table("tournament_participants").insert({
+                "tournament_id": tournament_id,
+                "user_id": str(member.id)
+            }).execute()
+        except Exception:
+            logging.exception("Tournament add participant failed")
+            return await reply(interaction, "❌ Gagal menambahkan peserta.")
+        await reply(interaction, "✅ " + member.mention + " berhasil ditambahkan ke tournament.")
+
+    @tournament.command(name="delete", description="Hapus tournament beserta peserta, jadwal, dan hasilnya.")
+    async def delete(self, interaction, tournament_id: int):
+        await interaction.response.defer(ephemeral=True)
+        t = tournament(tournament_id)
+        if not t or str(t["guild_id"]) != str(interaction.guild_id):
+            return await reply(interaction, "❌ Tournament tidak ditemukan.")
+        if not can_manage(interaction, t):
+            return await reply(interaction, "❌ Hanya organizer / Manage Server.")
+        try:
+            supabase.table("tournament_matches").delete().eq("tournament_id", tournament_id).execute()
+            supabase.table("tournament_participants").delete().eq("tournament_id", tournament_id).execute()
+            supabase.table("tournaments").delete().eq("id", tournament_id).execute()
+        except Exception:
+            logging.exception("Tournament delete failed")
+            return await reply(interaction, "❌ Gagal menghapus tournament.")
+        await reply(interaction, "🗑️ Tournament **" + t["name"] + "** (ID `" + str(tournament_id) + "`) berhasil dihapus.")
 
     @tournament.command(name="start", description="Tutup pendaftaran dan auto-generate jadwal/bracket.")
     async def start(self, interaction, tournament_id: int):
@@ -320,7 +364,7 @@ class Tournament(commands.Cog):
     async def panel(self, interaction, tournament_id: int):
         await interaction.response.defer()
         t = tournament(tournament_id)
-        if not t or t["guild_id"] != interaction.guild_id:
+        if not t or str(t["guild_id"]) != str(interaction.guild_id):
             return await reply(interaction, "❌ Tournament tidak ditemukan.")
         await interaction.followup.send(embed=await embed(t), view=Dashboard(t))
 

@@ -266,7 +266,7 @@ class Tournament(commands.Cog):
         if not interaction.user.guild_permissions.manage_guild:
             return await reply(interaction, "❌ Butuh Manage Server untuk membuat tournament.")
         await interaction.response.defer()
-        data = supabase.table("tournaments").insert({"guild_id": interaction.guild_id, "organizer_id": interaction.user.id, "name": name[:80], "format": format.value, "max_participants": max_participants, "status": "registration"}).execute().data[0]
+        data = supabase.table("tournaments").insert({"guild_id": str(interaction.guild_id), "organizer_id": str(interaction.user.id), "name": name[:80], "format": format.value, "max_participants": max_participants, "status": "registration"}).execute().data[0]
         await interaction.followup.send(embed=await embed(data), view=JoinView(data["id"]))
 
     @tournament.command(name="start", description="Tutup pendaftaran dan auto-generate jadwal/bracket.")
@@ -290,7 +290,7 @@ class Tournament(commands.Cog):
     async def score(self, interaction, tournament_id: int, match_id: int, home_score: int, away_score: int):
         await interaction.response.defer(ephemeral=True)
         t = tournament(tournament_id)
-        if not t or t["guild_id"] != interaction.guild_id:
+        if not t or str(t["guild_id"]) != str(interaction.guild_id):
             return await reply(interaction, "❌ Tournament tidak ditemukan.")
         if not can_manage(interaction, t):
             return await reply(interaction, "❌ Hanya organizer / Manage Server.")

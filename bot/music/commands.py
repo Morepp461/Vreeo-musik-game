@@ -7,7 +7,7 @@ from .source import resolve,search,resolve_playlist,is_spotify
 from .queue import Track
 from .player import MusicPlayer
 from . import favorites,history,playlist
-from .controls import NowPlayingView
+from .controls import NowPlayingView,AutoplayView
 from .guard import reject_channel,reject_manager,in_music_channel,can_control
 from . import settings
 from ..config import MAX_QUEUE_SIZE,MAX_PLAYLIST_SIZE
@@ -267,11 +267,22 @@ class Music(commands.Cog):
         if i.guild.voice_client and i.guild.voice_client.is_playing(): self.player.restart_current(i.guild)
         await i.response.send_message(f"⏩ Speed: **{q.speed:.2f}x**")
 
-    @app_commands.command(name="autoplay",description="Nyalakan/matikan autoplay")
+    @app_commands.command(name="autoplay",description="Atur mode autoplay")
     async def autoplay(self,i,enabled:bool):
         if await reject_manager(i): return
-        self.player.queue_for(i.guild.id).autoplay=enabled
-        await i.response.send_message(f"🤖 Autoplay: **{'on' if enabled else 'off'}**")
+        q=self.player.queue_for(i.guild.id)
+        if not enabled:
+            q.autoplay=False
+            q.autoplay_mode="random"
+            q.autoplay_genre="random"
+            q.autoplay_artist=None
+            return await i.response.send_message("🤖 Autoplay: **off**")
+        q.autoplay=True
+        await i.response.send_message(
+            "🤖 **Autoplay ON**\\nPilih sumber autoplay:",
+            view=AutoplayView(self.player,i.guild.id),
+            ephemeral=True
+        )
 
     @app_commands.command(name="247",description="Pertahankan bot di voice channel")
     async def always(self,i,enabled:bool):

@@ -85,18 +85,21 @@ class QueueJumpView(discord.ui.View):
         for index,track in enumerate(q.tracks[start:start+self.page_size],start+1):
             options.append(discord.SelectOption(label=f"{index}. {track.title}"[:100],value=str(index-1)))
         if options:
-            select=discord.ui.Select(placeholder="Pilih lagu untuk langsung jump...",options=options)
+            select=discord.ui.Select(placeholder="Pilih lagu untuk langsung jump...",options=options,row=0)
             select.callback=self.jump
             self.add_item(select)
+            delete=discord.ui.Select(placeholder="🗑️ Pilih lagu untuk dihapus...",options=options,row=1)
+            delete.callback=self.delete
+            self.add_item(delete)
         else:
             self.add_item(discord.ui.Button(label="Queue kosong",disabled=True))
-        prev=discord.ui.Button(label="◀️",style=discord.ButtonStyle.secondary,disabled=self.page<=0,row=1)
-        next_=discord.ui.Button(label="▶️",style=discord.ButtonStyle.secondary,disabled=self.page>=pages-1,row=1)
+        prev=discord.ui.Button(label="◀️",style=discord.ButtonStyle.secondary,disabled=self.page<=0,row=2)
+        next_=discord.ui.Button(label="▶️",style=discord.ButtonStyle.secondary,disabled=self.page>=pages-1,row=2)
         prev.callback=self.previous_page
         next_.callback=self.next_page
         self.add_item(prev)
         self.add_item(next_)
-        back=discord.ui.Button(label="↩️ Now Playing",style=discord.ButtonStyle.primary,row=2)
+        back=discord.ui.Button(label="↩️ Now Playing",style=discord.ButtonStyle.primary,row=3)
         back.callback=self.back
         self.add_item(back)
 
@@ -162,6 +165,21 @@ class QueueJumpView(discord.ui.View):
         else:
             asyncio.create_task(self.player.play_next(guild))
         await interaction.edit_original_response(content=f"⏭️ Jump ke **{target.title}**")
+
+    async def delete(self,interaction:discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        if not can_control(interaction.user):
+            return await interaction.edit_original_response(content="🔒 Kamu tidak punya akses kontrol player.")
+        q=self.player.queue_for(self.guild_id)
+        try:
+            position=int(interaction.data["values"][0])
+        except Exception:
+            return await interaction.edit_original_response(content="❌ Pilihan queue tidak valid.")
+        if position < 0 or position >= len(q.tracks):
+            return await interaction.edit_original_response(content="❌ Lagu itu sudah tidak ada di queue.")
+        removed=q.remove(position)
+        self._build()
+        await interaction.edit_original_response(content=f"🗑️ **{removed.title}** dihapus dari queue.",embed=self.embed(),view=self)
 
 
 class ArtistAutoplayModal(discord.ui.Modal, title="🎤 Autoplay by Artist"):
@@ -476,6 +494,7 @@ class PremiumView(discord.ui.View):
         if value=="crossfade":
             return await interaction.response.edit_message(content="✨ Pilih durasi crossfade:",view=CrossfadeView(self.player,self.guild_id))
         if value=="taste":
+            await interaction.response.defer()
             data=premium.taste(interaction.user.id)
             e=discord.Embed(title="✦ VREEO MUSIC • PERSONAL TASTE",description=f"**{data['plays']}** plays dalam 7 hari terakhir")
             songs="\n".join(f"**{i}.** {n[:65]} — {count}x" for i,(n,count) in enumerate(data["top_songs"],1)) or "Belum cukup data."
@@ -487,6 +506,7 @@ class PremiumView(discord.ui.View):
             e.set_footer(text="VREEO MUSIC • Personal Taste Profile")
             return await interaction.response.edit_message(content=None,embed=e,view=self)
         if value=="recap":
+            await interaction.response.defer()
             data=premium.weekly(interaction.user.id)
             e=discord.Embed(title="✦ VREEO MUSIC • WEEKLY RECAP",description=f"**{data['plays']}** plays • 7 hari terakhir")
             songs="\n".join(f"**{i}.** {n[:65]} — {count}x" for i,(n,count) in enumerate(data["songs"].most_common(5),1)) or "Belum ada data."
@@ -494,7 +514,8 @@ class PremiumView(discord.ui.View):
             e.add_field(name="🔥 MOST PLAYED",value=songs,inline=False)
             e.add_field(name="🎤 TOP ARTISTS",value=artists,inline=False)
             e.set_footer(text="VREEO MUSIC • Weekly Recap")
-            return await interaction.response.edit_message(content=None,embed=e,view=self)
+            return await interaction.edit_original_response(content=None,embed=e,view=self)
+        await interaction.response.defer()
         try:
             queries=premium.discovery_queries(interaction.user.id)
             results=[]
@@ -511,10 +532,10 @@ class PremiumView(discord.ui.View):
                     seen.add(url); clean.append(r)
             clean=clean[:5]
             if not clean:
-                return await interaction.response.edit_message(content="❌ Discovery belum menemukan hasil.",view=self)
-            return await interaction.response.edit_message(content="🎧 Pilih hasil discovery untuk masuk queue:",view=DiscoveryView(self.player,self.guild_id,clean))
+                return await interaction.edit_original_response(content="❌ Discovery belum menemukan hasil.",view=self)
+            return await interaction.edit_original_response(content="🎧 Pilih hasil discovery untuk masuk queue:",view=DiscoveryView(self.player,self.guild_id,clean))
         except Exception as exc:
-            return await interaction.response.edit_message(content=f"❌ Discovery gagal: {exc}",view=self)
+            return await interaction.edit_original_response(content=f"❌ Discovery gagal: {exc}",view=self)
 
 
 class DiscoveryView(discord.ui.View):
@@ -570,8 +591,11 @@ class VibeView(discord.ui.View):
             url=r.get("webpage_url")
             if not url or url in seen: continue
             seen.add(url)
+            duration=r.get("duration")
+            if duration is not None and not (20 <= float(duration) <= 480):
+                continue
             if q.current and q.current.webpage_url==url or any(t.webpage_url==url for t in q.tracks): continue
-            q.add(Track(title=r["title"],webpage_url=url,duration=r.get("duration"),thumbnail=r.get("thumbnail"),uploader=r.get("uploader"),requested_by=interaction.user.id))
+            q.add(Track(title=r["title"],webpage_url=url,duration=duration,thumbnail=r.get("thumbnail"),uploader=r.get("uploader"),requested_by=interaction.user.id))
             added+=1
             if added>=min(room,5): break
         guild=self.player.bot.get_guild(self.guild_id)

@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from typing import Optional
-import time
 import random
 
 @dataclass
@@ -31,27 +30,16 @@ class GuildQueue:
     started_offset: float = 0.0
     paused_at: float = 0.0
     effects_dirty: bool = False
+    panel_channel_id: Optional[int] = None
+    panel_message_id: Optional[int] = None
 
-    def add(self,track):
-        self.tracks.append(track)
-
+    def add(self,track): self.tracks.append(track)
     def pop_next(self):
-        if self.loop=="track" and self.current:
-            return self.current
-        if self.loop=="queue" and self.current:
-            self.tracks.append(self.current)
+        if self.loop=="track" and self.current: return self.current
+        if self.loop=="queue" and self.current: self.tracks.append(self.current)
         return self.tracks.pop(0) if self.tracks else None
-
-    def clear(self):
-        self.tracks.clear()
-
-    def shuffle(self):
-        random.shuffle(self.tracks)
-
-    def remove(self,index):
-        return self.tracks.pop(index)
-
+    def clear(self): self.tracks.clear()
+    def shuffle(self): random.shuffle(self.tracks)
+    def remove(self,index): return self.tracks.pop(index)
     def move(self,source,target):
-        item=self.tracks.pop(source)
-        self.tracks.insert(target,item)
-        return item
+        item=self.tracks.pop(source); self.tracks.insert(target,item); return item

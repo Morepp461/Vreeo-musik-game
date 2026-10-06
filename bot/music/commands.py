@@ -39,11 +39,11 @@ class SearchView(discord.ui.View):
             q=self.cog.player.queue_for(interaction.guild.id)
             q.panel_channel_id=interaction.channel.id
             if len(q.tracks)>=MAX_QUEUE_SIZE:
-                return await interaction.response.send_message("Queue sudah penuh.",ephemeral=True)
+                return await interaction.edit_original_response(content="Queue sudah penuh.")
             if (q.current and q.current.webpage_url==r["webpage_url"]) or any(t.webpage_url==r["webpage_url"] for t in q.tracks):
-                return await interaction.response.send_message("Track itu sudah ada di queue.",ephemeral=True)
+                return await interaction.edit_original_response(content="Track itu sudah ada di queue.")
             q.add(Track(title=r["title"],webpage_url=r["webpage_url"],duration=r.get("duration"),thumbnail=r.get("thumbnail"),uploader=r.get("uploader"),requested_by=interaction.user.id))
-            await interaction.response.send_message(f"▶️ Ditambahkan: **{r['title']}**",ephemeral=True)
+            await interaction.edit_original_response(content=f"▶️ Ditambahkan: **{r['title']}**")
             if not interaction.guild.voice_client.is_playing():
                 asyncio.create_task(self.cog.player.play_next(interaction.guild))
         return callback

@@ -121,9 +121,16 @@ class MusicPlayer:
         try: history.record(track.requested_by or 0,track.title,track.webpage_url)
         except Exception: pass
         await self.ensure_now_playing(guild)
+        retry_state={"count":0}
         def after(error):
             if error:
                 log.error("Voice player ended with error for %s: %r",track.title,error)
+                if retry_state["count"] < 1 and track.stream_url:
+                    retry_state["count"] += 1
+                    track.stream_url=None
+                    track.stream_headers=None
+                    q.replay_current=True
+                    log.warning("Retrying stream resolution for %s after FFmpeg playback error",track.title)
             self.bot.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.play_next(guild)))
         try:
             voice.play(source,after=after)

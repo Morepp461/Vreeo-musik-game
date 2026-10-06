@@ -25,5 +25,16 @@ class VreeoBot(commands.Bot):
     async def on_ready(self):
         logging.info("Logged in as %s (%s)",self.user,self.user.id if self.user else "unknown")
 
+    async def on_app_command_error(self,interaction,error):
+        logging.error("Application command error",exc_info=error)
+        message="❌ Terjadi error saat menjalankan command. Coba lagi."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message,ephemeral=True)
+            else:
+                await interaction.response.send_message(message,ephemeral=True)
+        except Exception:
+            pass
+
 bot=VreeoBot()
 bot.run(DISCORD_TOKEN)

@@ -1,6 +1,5 @@
 import aiohttp
 import logging
-from urllib.parse import quote
 
 log=logging.getLogger(__name__)
 

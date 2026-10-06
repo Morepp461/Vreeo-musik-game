@@ -30,6 +30,7 @@ class GuildQueue:
     started_offset: float = 0.0
     paused_at: float = 0.0
     effects_dirty: bool = False
+    last_error: Optional[str] = None
     panel_channel_id: Optional[int] = None
     panel_message_id: Optional[int] = None
 

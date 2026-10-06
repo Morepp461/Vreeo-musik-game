@@ -43,9 +43,14 @@ class SearchView(discord.ui.View):
             if (q.current and q.current.webpage_url==r["webpage_url"]) or any(t.webpage_url==r["webpage_url"] for t in q.tracks):
                 return await interaction.edit_original_response(content="Track itu sudah ada di queue.")
             q.add(Track(title=r["title"],webpage_url=r["webpage_url"],duration=r.get("duration"),thumbnail=r.get("thumbnail"),uploader=r.get("uploader"),requested_by=interaction.user.id))
-            await interaction.edit_original_response(content=f"▶️ Ditambahkan: **{r['title']}**")
-            if not interaction.guild.voice_client.is_playing():
-                asyncio.create_task(self.cog.player.play_next(interaction.guild))
+            if not interaction.guild.voice_client or not interaction.guild.voice_client.is_playing():
+                ok=await self.cog.player.play_next(interaction.guild)
+                if ok:
+                    await interaction.edit_original_response(content=f"▶️ Memutar: **{r['title']}**")
+                else:
+                    await interaction.edit_original_response(content=f"⚠️ **{r['title']}** masuk queue, tapi gagal mulai playback.")
+            else:
+                await interaction.edit_original_response(content=f"▶️ Ditambahkan: **{r['title']}** ke queue")
         return callback
 
 class Music(commands.Cog):

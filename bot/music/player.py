@@ -65,7 +65,8 @@ class MusicPlayer:
             try:
                 results=await search(q.current.title,10)
                 recent={t.webpage_url for t in q.played[-10:]}; recent.add(q.current.webpage_url)
-                candidates=music_candidates(results)\n                candidate=next((r for r in candidates if r["webpage_url"] not in recent),None)
+                candidates=music_candidates(results)
+                candidate=next((r for r in candidates if r["webpage_url"] not in recent),None)
                 if candidate:
                     track=Track(title=candidate["title"],webpage_url=candidate["webpage_url"],duration=candidate.get("duration"),thumbnail=candidate.get("thumbnail"),uploader=candidate.get("uploader"),requested_by=q.current.requested_by)
             except Exception: track=None

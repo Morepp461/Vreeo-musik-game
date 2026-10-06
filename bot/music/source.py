@@ -20,7 +20,7 @@ BASE={
     "format":"bestaudio/best",
     "skip_download":True,
     "extractor_args":{
-        "youtube":{"player_client":["android_vr"]}
+        "youtube":{"player_client":["web_embedded"]}
     },
 }
 if POT_PROVIDER_URL:

@@ -64,17 +64,47 @@ class MusicPlayer:
             track.playback_retries=0
         if not track and q.autoplay and q.current:
             try:
-                autoplay_queries=("popular songs","best pop songs","latest music","indie music","r&b songs","dance music","chill music","rock songs","electronic music","top songs")
-                query=random.choice(autoplay_queries)
+                genre_queries={
+                    "random":("popular songs","latest music","indie music","r&b songs","dance music","chill music","rock songs","electronic music","top songs"),
+                    "pop":("pop hits","best pop songs","new pop music","popular pop songs"),
+                    "rock":("rock hits","best rock songs","classic rock songs","new rock music"),
+                    "rnb":("r&b songs","best r&b music","rnb hits","soul r&b songs"),
+                    "hiphop":("hip hop hits","rap songs","best hip hop music","new rap songs"),
+                    "edm":("EDM hits","electronic dance music","best EDM songs","dance music"),
+                    "lofi":("lofi chill music","lofi beats","chill lofi songs","study lofi"),
+                    "jpop":("J-Pop hits","best J-Pop songs","Japanese pop music"),
+                    "kpop":("K-Pop hits","best K-Pop songs","Korean pop music"),
+                    "indonesia":("lagu Indonesia","Indonesian pop songs","musik Indonesia terbaru"),
+                    "classical":("classical music","best classical songs","classical piano music"),
+                    "disco":("disco funk hits","best disco songs","funk music"),
+                    "jazz":("jazz music","best jazz songs","smooth jazz"),
+                    "metal":("metal hits","best metal songs","heavy metal music"),
+                }
+                mode=q.autoplay_mode or "random"
+                if mode=="artist" and q.autoplay_artist:
+                    artist=q.autoplay_artist.strip()
+                    query=random.choice((f"{artist} songs",f"{artist} official songs",f"{artist} music"))
+                else:
+                    genre=q.autoplay_genre if mode=="genre" else "random"
+                    query=random.choice(genre_queries.get(genre,genre_queries["random"]))
                 results=await search(query,10)
                 recent={t.webpage_url for t in q.played[-20:]}; recent.add(q.current.webpage_url)
                 current_title=(q.current.title or "").lower()
-                candidates=[r for r in music_candidates(results) if r["webpage_url"] not in recent and r.get("title","").lower()!=current_title]
+                candidates=music_candidates(results)
+                if mode=="artist" and q.autoplay_artist:
+                    artist_tokens=[x for x in q.autoplay_artist.lower().replace("-"," ").split() if len(x)>2]
+                    def artist_match(r):
+                        text=f"{r.get('title','')} {r.get('uploader','') or r.get('channel','')}".lower()
+                        return bool(artist_tokens) and all(token in text for token in artist_tokens)
+                    matched=[r for r in candidates if artist_match(r)]
+                    candidates=matched or candidates
+                candidates=[r for r in candidates if r["webpage_url"] not in recent and r.get("title","").lower()!=current_title]
                 random.shuffle(candidates)
                 candidate=candidates[0] if candidates else None
                 if candidate:
                     track=Track(title=candidate["title"],webpage_url=candidate["webpage_url"],duration=candidate.get("duration"),thumbnail=candidate.get("thumbnail"),uploader=candidate.get("uploader"),requested_by=q.current.requested_by)
-            except Exception: track=None
+            except Exception:
+                track=None
         if not track:
             q.current=None; q.position=0
             await self.refresh_now_playing(guild)

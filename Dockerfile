@@ -14,4 +14,4 @@ RUN git clone --depth 1 --branch 2.0.1 https://github.com/Brainicism/bgutil-ytdl
 RUN cd /opt/bgutil-ytdlp-pot-provider/server && deno install --allow-scripts=npm:canvas --frozen
 COPY bot ./bot
 COPY database ./database
-CMD ["python","-m","bot.main"]
+CMD ["sh","-c","cd /opt/bgutil-ytdlp-pot-provider/server/node_modules && deno run --allow-env --allow-net --allow-ffi=. --allow-read=. ../src/main.ts & exec python -m bot.main"]

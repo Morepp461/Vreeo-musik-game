@@ -15,11 +15,12 @@ BASE={
     "noplaylist":True,
     "format":"bestaudio/best",
     "skip_download":True,
+    "extractor_args":{
+        "youtube":{"player_client":["android_vr","web_embedded","tv"]}
+    },
 }
 if POT_PROVIDER_URL:
-    BASE["extractor_args"]={
-        "youtubepot-bgutilhttp":{"base_url":[POT_PROVIDER_URL]}
-    }
+    BASE["extractor_args"]["youtubepot-bgutilhttp"]={"base_url":[POT_PROVIDER_URL]}
 _spotify_token=None
 _spotify_expires=0.0
 
@@ -123,7 +124,7 @@ async def resolve(query:str,requested_by:int):
         return await resolve_spotify(query,requested_by)
     parsed=urlparse(query)
     is_url=bool(parsed.scheme and parsed.netloc)
-    opts={**BASE}
+    opts={**BASE,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in BASE["extractor_args"].items()}}
     if not is_url:
         opts["default_search"]="ytsearch1"
     info=await _run(query,opts)
@@ -148,9 +149,9 @@ async def search(query:str,limit:int=5):
             results.extend(await spotify_search(query,limit))
         except Exception:
             pass
-    opts={"quiet":True,"no_warnings":True,"default_search":f"ytsearch{min(max(limit,1),10)}","skip_download":True,"extract_flat":"discard_in_playlist"}
+    opts={"quiet":True,"no_warnings":True,"default_search":f"ytsearch{min(max(limit,1),10)}","skip_download":True,"extract_flat":"discard_in_playlist","extractor_args":{"youtube":{"player_client":["android_vr","web_embedded","tv"]}}}
     if POT_PROVIDER_URL:
-        opts["extractor_args"]={"youtubepot-bgutilhttp":{"base_url":[POT_PROVIDER_URL]}}
+        opts["extractor_args"]["youtubepot-bgutilhttp"]={"base_url":[POT_PROVIDER_URL]}
     info=await _run(query,opts,20)
     for item in info.get("entries") or []:
         if not item: continue

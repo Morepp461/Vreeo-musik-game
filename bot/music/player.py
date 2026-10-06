@@ -17,10 +17,25 @@ class MusicPlayer:
     def __init__(self,bot):
         self.bot=bot
         self.queues={}
+        self.stats={}
 
     def queue_for(self,guild_id):
         from .queue import GuildQueue
         return self.queues.setdefault(guild_id,GuildQueue())
+
+    def record_play(self,guild_id,track):
+        bucket=self.stats.setdefault(guild_id,{"plays":0,"seconds":0.0,"songs":{},"artists":{},"users":{}})
+        bucket["plays"]+=1
+        bucket["seconds"]+=float(track.duration or 0)
+        title=track.title or "Unknown"
+        bucket["songs"][title]=bucket["songs"].get(title,0)+1
+        artist=(track.uploader or "Unknown").strip() or "Unknown"
+        bucket["artists"][artist]=bucket["artists"].get(artist,0)+1
+        user=str(track.requested_by or 0)
+        bucket["users"][user]=bucket["users"].get(user,0)+1
+
+    def stats_for(self,guild_id):
+        return self.stats.get(guild_id,{"plays":0,"seconds":0.0,"songs":{},"artists":{},"users":{}})
 
     async def refresh_now_playing(self,guild):
         q=self.queue_for(guild.id)
@@ -97,12 +112,25 @@ class MusicPlayer:
                             break
                 else:
                     genre=q.autoplay_genre if mode=="genre" else "random"
-                    queries=list(genre_queries.get(genre,genre_queries["random"]))
-                    random.shuffle(queries)
+                    if mode=="random" and q.current:
+                        title=q.current.title.strip()
+                        artist=(q.current.uploader or "").strip()
+                        smart_queries=[
+                            f"similar songs to {title}",
+                            f"songs like {title}",
+                            f"{artist} similar songs" if artist and "topic" not in artist.lower() else f"music similar to {title}",
+                        ]
+                        queries=[x for x in smart_queries if x]
+                        fallback_queries=list(genre_queries["random"])
+                        random.shuffle(fallback_queries)
+                        queries.extend(fallback_queries[:2])
+                    else:
+                        queries=list(genre_queries.get(genre,genre_queries["random"]))
+                        random.shuffle(queries)
                     results=[]
                     # Try several queries: a single weak/blocked YouTube search must
                     # never make autoplay silently die.
-                    for query in queries[:4]:
+                    for query in queries[:5]:
                         try:
                             found=await search(query,10)
                         except Exception as exc:
@@ -189,6 +217,8 @@ class MusicPlayer:
             track.duration=data.get("duration") or track.duration
             track.thumbnail=data.get("thumbnail") or track.thumbnail
             track.uploader=data.get("uploader") or track.uploader
+        if not (replaying and track.playback_retries > 0):
+            self.record_play(guild.id,track)
         af=[]
         if FILTERS.get(q.filter): af.append(FILTERS[q.filter])
         if q.speed!=1.0: af.append("atempo=%.2f"%q.speed)

@@ -1,3 +1,4 @@
+import asyncio
 import discord
 import time
 def _fmt(s):
@@ -53,6 +54,9 @@ class QueueJumpView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         if not can_control(interaction.user):
             return await interaction.edit_original_response(content="🔒 Kamu tidak punya akses kontrol player.")
+        guild=self.guild
+        if not guild:
+            return await interaction.edit_original_response(content="❌ Guild tidak ditemukan.")
         q=self.player.queue_for(self.guild_id)
         try:
             position=int(interaction.data["values"][0])
@@ -63,11 +67,11 @@ class QueueJumpView(discord.ui.View):
         target=q.tracks[position]
         for _ in range(position):
             q.played.append(q.tracks.pop(0))
-        voice=self.guild.voice_client if self.guild else None
+        voice=guild.voice_client
         if voice and (voice.is_playing() or voice.is_paused()):
-            self.player.skip(self.guild)
+            self.player.skip(guild)
         else:
-            await self.player.play_next(self.guild)
+            asyncio.create_task(self.player.play_next(guild))
         await interaction.edit_original_response(content=f"⏭️ Jump ke **{target.title}**")
 
 class NowPlayingView(discord.ui.View):

@@ -28,9 +28,13 @@ class SearchView(discord.ui.View):
                 return await interaction.response.send_message("Ini bukan search kamu.",ephemeral=True)
             if not in_music_channel(interaction):
                 return await interaction.response.send_message("🎵 Gunakan channel musik.",ephemeral=True)
-            v=await self.cog.voice(interaction)
+            await interaction.response.defer(ephemeral=True)
+            try:
+                v=await asyncio.wait_for(self.cog.voice(interaction),timeout=12)
+            except asyncio.TimeoutError:
+                return await interaction.edit_original_response(content="❌ Koneksi ke voice channel timeout. Coba lagi.")
             if not v:
-                return await interaction.response.send_message("Masuk voice channel dulu.",ephemeral=True)
+                return await interaction.edit_original_response(content="Masuk voice channel dulu.")
             r=self.results[index]
             q=self.cog.player.queue_for(interaction.guild.id)
             q.panel_channel_id=interaction.channel.id
@@ -78,14 +82,21 @@ class Music(commands.Cog):
         if not i.user.voice: return None
         ch=i.user.voice.channel
         v=i.guild.voice_client
-        if v and v.channel!=ch: await v.move_to(ch)
-        return v or await ch.connect()
+        if v and v.channel!=ch:
+            await asyncio.wait_for(v.move_to(ch),timeout=12)
+            return v
+        if v:
+            return v
+        return await asyncio.wait_for(ch.connect(),timeout=12)
 
     async def add_query(self,i,query):
         if await reject_channel(i): return
-        v=await self.voice(i)
-        if not v: raise ValueError("Masuk voice channel dulu.")
         await i.response.defer()
+        try:
+            v=await self.voice(i)
+        except asyncio.TimeoutError:
+            raise ValueError("Koneksi ke voice channel timeout. Coba lagi.")
+        if not v: raise ValueError("Masuk voice channel dulu.")
         if "youtube.com/playlist" in query or "list=" in query or (is_spotify(query) and any(f"/{kind}/" in query for kind in ("playlist","album"))):
             tracks=await resolve_playlist(query,i.user.id,MAX_PLAYLIST_SIZE)
             q=self.player.queue_for(i.guild.id)

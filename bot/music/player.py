@@ -122,7 +122,7 @@ class MusicPlayer:
         if q.current: q.tracks.insert(0,q.current)
         q.current=prev
         q.position=0
-        q.tracks.insert(0,prev)
+        q.replay_current=True
         self.skip(guild)
         return True
 

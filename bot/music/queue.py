@@ -25,6 +25,7 @@ class GuildQueue:
     position: float = 0.0
     filter: str = "off"
     speed: float = 1.0
+    replay_current: bool = False
 
     def add(self,track):
         self.tracks.append(track)

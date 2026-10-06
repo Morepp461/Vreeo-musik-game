@@ -12,6 +12,7 @@ class VreeoBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
+        await self.load_extension("bot.music.commands")
         await self.load_extension("bot.games.commands")
         if DISCORD_GUILD_ID:
             guild = discord.Object(id=DISCORD_GUILD_ID)

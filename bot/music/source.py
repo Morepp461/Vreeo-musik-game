@@ -282,6 +282,45 @@ async def resolve_spotify(query,requested_by):
     yt["thumbnail"]=((item.get("album",{}).get("images") or [{}])[0].get("url")) or yt.get("thumbnail")
     return yt
 
+async def resolve_playlist(url:str,requested_by:int,limit:int=100):
+    if is_spotify(url):
+        parsed=urlparse(url)
+        kind=parsed.path.strip("/").split("/")[0]
+        if kind not in {"playlist","album"}:
+            return [Track(**(await resolve(url,requested_by)))]
+        items=await _spotify_items_from_collection(url,kind,limit)
+        tracks=[]
+        for item in items:
+            track_id=item.get("_spotify_id")
+            if not track_id:
+                continue
+            tracks.append(Track(
+                title=item.get("name","Unknown"),
+                webpage_url=_spotify_url("track",track_id),
+                duration=item.get("duration"),
+                thumbnail=((item.get("album",{}).get("images") or [{}])[0].get("url")),
+                uploader=", ".join(a.get("name","") for a in item.get("artists",[]) if a.get("name")),
+                requested_by=requested_by,
+            ))
+        if not tracks:
+            raise ValueError("Spotify playlist kosong atau metadata track tidak tersedia.")
+        return tracks
+    opts={**BASE,"noplaylist":False,"extract_flat":"in_playlist"}
+    info=await _run(url,opts,40)
+    entries=[]
+    for item in info.get("entries") or []:
+        if not item:
+            continue
+        item_url=item.get("webpage_url") or item.get("url")
+        if item_url and not str(item_url).startswith(("http://","https://")):
+            item_url=f"https://www.youtube.com/watch?v={item_url}"
+        entries.append(Track(title=item.get("title","Unknown"),webpage_url=item_url,duration=item.get("duration"),thumbnail=item.get("thumbnail"),uploader=item.get("uploader"),requested_by=requested_by))
+        if len(entries)>=limit:
+            break
+    if not entries:
+        return [Track(**(await resolve(url,requested_by)))]
+    return entries
+
 async def resolve(query:str,requested_by:int):
     if is_spotify(query):
         return await resolve_spotify(query,requested_by)

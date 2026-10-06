@@ -316,7 +316,8 @@ class Music(commands.Cog):
     @settings_group.command(name="music-channel",description="Set channel khusus musik")
     @app_commands.describe(channel="Channel teks untuk command musik")
     async def music_channel(self,i,channel:discord.TextChannel|None=None):
-        if await reject_manager(i): return
+        if not can_control(i.user):
+            return await i.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
         settings.set_channel(channel.id if channel else None)
         await i.response.send_message(f"🎵 Music channel: {channel.mention if channel else 'semua channel'}")
 

@@ -138,9 +138,12 @@ async def search(query:str,limit:int=5):
     info=await _run(query,opts,20)
     for item in info.get("entries") or []:
         if not item: continue
+        item_url=item.get("webpage_url") or item.get("url")
+        if item_url and not str(item_url).startswith(("http://","https://")):
+            item_url=f"https://www.youtube.com/watch?v={item_url}"
         results.append({
             "title":item.get("title","Unknown"),
-            "webpage_url":item.get("webpage_url") or item.get("url"),
+            "webpage_url":item_url,
             "duration":item.get("duration"),
             "thumbnail":item.get("thumbnail"),
             "uploader":item.get("uploader"),

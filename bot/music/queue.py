@@ -6,7 +6,7 @@ import random
 class Track:
     title: str
     webpage_url: str
-    stream_url: str
+    stream_url: Optional[str] = None
     duration: Optional[float] = None
     thumbnail: Optional[str] = None
     uploader: Optional[str] = None
@@ -16,10 +16,13 @@ class Track:
 class GuildQueue:
     tracks: list[Track] = field(default_factory=list)
     current: Optional[Track] = None
+    played: list[Track] = field(default_factory=list)
     loop: str = "off"
     volume: float = 1.0
     autoplay: bool = False
+    always_connected: bool = False
     paused: bool = False
+    position: float = 0.0
 
     def add(self, track: Track):
         self.tracks.append(track)
@@ -27,9 +30,9 @@ class GuildQueue:
     def pop_next(self) -> Optional[Track]:
         if self.loop == "track" and self.current:
             return self.current
-        if self.tracks:
-            return self.tracks.pop(0)
-        return None
+        if self.loop == "queue" and self.current:
+            self.tracks.append(self.current)
+        return self.tracks.pop(0) if self.tracks else None
 
     def clear(self):
         self.tracks.clear()
@@ -39,3 +42,8 @@ class GuildQueue:
 
     def remove(self, index: int) -> Track:
         return self.tracks.pop(index)
+
+    def move(self, source: int, target: int):
+        item=self.tracks.pop(source)
+        self.tracks.insert(target,item)
+        return item

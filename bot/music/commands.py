@@ -122,6 +122,51 @@ class Music(commands.Cog):
         if not v.is_playing():
             asyncio.create_task(self.player.play_next(i.guild))
 
+    @commands.command(name="play")
+    async def prefix_play(self,ctx,*,query:str):
+        if not ctx.guild:
+            return
+        if not in_music_channel(ctx):
+            return await ctx.send("🎵 Gunakan channel musik.")
+        remaining=self.rate_limited(ctx.author.id,"prefix_play")
+        if remaining:
+            return await ctx.send(f"⏳ Tunggu {remaining:.1f} detik.")
+        try:
+            v=await self.voice(ctx)
+            if not v:
+                return await ctx.send("Masuk voice channel dulu.")
+            q=self.player.queue_for(ctx.guild.id)
+            q.panel_channel_id=ctx.channel.id
+            if "youtube.com/playlist" in query or "list=" in query or (is_spotify(query) and any(f"/{kind}/" in query for kind in ("playlist","album"))):
+                tracks=await resolve_playlist(query,ctx.author.id,MAX_PLAYLIST_SIZE)
+                room=max(0,MAX_QUEUE_SIZE-len(q.tracks))
+                tracks=tracks[:room]
+                for track in tracks:
+                    q.add(track)
+                if not tracks:
+                    return await ctx.send("⚠️ Queue sudah penuh atau playlist kosong.")
+                await ctx.send(f"📚 **{len(tracks)}** track masuk queue.")
+            else:
+                results=await search(query,1)
+                if not results:
+                    return await ctx.send("❌ Lagu tidak ditemukan.")
+                r=results[0]
+                if len(q.tracks)>=MAX_QUEUE_SIZE:
+                    return await ctx.send("❌ Queue sudah penuh.")
+                if (q.current and q.current.webpage_url==r["webpage_url"]) or any(t.webpage_url==r["webpage_url"] for t in q.tracks):
+                    return await ctx.send("❌ Track itu sudah ada di queue.")
+                track=Track(title=r["title"],webpage_url=r["webpage_url"],duration=r.get("duration"),thumbnail=r.get("thumbnail"),uploader=r.get("uploader"),requested_by=ctx.author.id)
+                q.add(track)
+                await ctx.send(f"🎵 **{track.title}** masuk queue.")
+            if not v.is_playing() and not v.is_paused():
+                ok=await self.player.play_next(ctx.guild)
+                if not ok:
+                    await ctx.send("⚠️ Track masuk queue, tapi gagal mulai playback.")
+        except asyncio.TimeoutError:
+            await ctx.send("❌ Koneksi ke voice channel timeout. Coba lagi.")
+        except Exception as e:
+            await ctx.send(f"❌ {e}")
+
     @app_commands.command(name="play",description="Putar lagu dari URL atau pencarian")
     async def play(self,i,query:str):
         remaining=self.rate_limited(i.user.id,"play")

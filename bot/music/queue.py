@@ -23,14 +23,16 @@ class GuildQueue:
     always_connected: bool = False
     paused: bool = False
     position: float = 0.0
+    filter: str = "off"
+    speed: float = 1.0
 
-    def add(self, track: Track):
+    def add(self,track):
         self.tracks.append(track)
 
-    def pop_next(self) -> Optional[Track]:
-        if self.loop == "track" and self.current:
+    def pop_next(self):
+        if self.loop=="track" and self.current:
             return self.current
-        if self.loop == "queue" and self.current:
+        if self.loop=="queue" and self.current:
             self.tracks.append(self.current)
         return self.tracks.pop(0) if self.tracks else None
 
@@ -40,10 +42,10 @@ class GuildQueue:
     def shuffle(self):
         random.shuffle(self.tracks)
 
-    def remove(self, index: int) -> Track:
+    def remove(self,index):
         return self.tracks.pop(index)
 
-    def move(self, source: int, target: int):
+    def move(self,source,target):
         item=self.tracks.pop(source)
         self.tracks.insert(target,item)
         return item

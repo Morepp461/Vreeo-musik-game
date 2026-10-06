@@ -137,7 +137,7 @@ class MusicPlayer:
                     candidates=[r for r in candidates if artist_match(r)]
                 # Autoplay is intentionally capped at 8 minutes. Direct member
                 # requests are unaffected by this rule.
-                candidates=[r for r in candidates if not isinstance(r.get("duration"),(int,float)) or r.get("duration") <= 480]
+                candidates=[r for r in candidates if not isinstance(r.get("duration"),(int,float)) or 20 <= r.get("duration") <= 480]
                 candidates=[r for r in candidates if r.get("webpage_url") and r["webpage_url"] not in recent and r.get("title","").lower()!=current_title]
                 # Search metadata can be sparse (especially YouTube's public
                 # fallback), so use a safe music-looking result when the scorer
@@ -152,7 +152,7 @@ class MusicPlayer:
                             continue
                         if any(word in title for word in ("reaction","podcast","interview","news","tutorial","gameplay","walkthrough","review","commentary","vlog","shorts","livestream","trailer","teaser")):
                             continue
-                        if isinstance(duration,(int,float)) and (duration < 20 or duration > 3600):
+                        if isinstance(duration,(int,float)) and (duration < 20 or duration > 480):
                             continue
                         if isinstance(duration,(int,float)) and duration > 480:
                             continue
@@ -222,6 +222,14 @@ class MusicPlayer:
             track.duration=data.get("duration") or track.duration
             track.thumbnail=data.get("thumbnail") or track.thumbnail
             track.uploader=data.get("uploader") or track.uploader
+        # Resolver metadata is authoritative when search metadata was sparse.
+        if autoplay_generated and isinstance(track.duration,(int,float)) and track.duration > 480:
+            q.last_error="Autoplay skipped a track longer than 8 minutes."
+            q.autoplay_failed_urls.add(track.webpage_url)
+            q.current=None
+            q.position=0
+            await self.refresh_now_playing(guild)
+            return await self.play_next(guild)
         self.record_play(guild.id,track)
         af=[]
         if FILTERS.get(q.filter): af.append(FILTERS[q.filter])

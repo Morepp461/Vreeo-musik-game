@@ -26,6 +26,7 @@ class GuildQueue:
     autoplay_genre: str = "random"
     autoplay_artist: Optional[str] = None
     always_connected: bool = False
+    always_channel_id: Optional[int] = None
     paused: bool = False
     position: float = 0.0
     filter: str = "off"

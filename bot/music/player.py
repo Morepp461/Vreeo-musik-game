@@ -76,6 +76,7 @@ class MusicPlayer:
         if FILTERS.get(q.filter): af.append(FILTERS[q.filter])
         if q.speed != 1.0: af.append(f"atempo={q.speed:.2f}")
         af.append(f"volume={q.volume:.2f}")
+        q.effects_dirty=False
         source=discord.FFmpegPCMAudio(
             track.stream_url,
             before_options=f"-ss {seek_offset:.2f} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -123,6 +124,8 @@ class MusicPlayer:
                 q.started_at+=time.monotonic()-q.paused_at
             q.paused=False
             q.paused_at=0.0
+            if q.effects_dirty:
+                self.restart_current(guild)
 
     def previous(self,guild):
         q=self.queue_for(guild.id)
@@ -158,6 +161,7 @@ class MusicPlayer:
         value=max(0,min(150,value))
         q=self.queue_for(guild.id)
         q.volume=value/100
+        q.effects_dirty=True
         if guild.voice_client and guild.voice_client.is_playing():
             self.restart_current(guild)
         return value

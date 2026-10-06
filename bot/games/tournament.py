@@ -245,6 +245,9 @@ async def participant_names(interaction, tid):
     names = {}
     for p in ps:
         uid = str(p["user_id"])
+        if p.get("participant_name"):
+            names[uid] = str(p["participant_name"])
+            continue
         member = interaction.guild.get_member(int(uid))
         if member is None:
             try:

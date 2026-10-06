@@ -62,7 +62,7 @@ class MusicPlayer:
             track=q.pop_next()
         if track is not None and not replaying:
             track.playback_retries=0
-        if not track and q.autoplay and q.current:
+        if not track and q.autoplay:
             try:
                 genre_queries={
                     "random":("popular songs","latest music","indie music","r&b songs","dance music","chill music","rock songs","electronic music","top songs"),
@@ -99,8 +99,9 @@ class MusicPlayer:
                     genre=q.autoplay_genre if mode=="genre" else "random"
                     query=random.choice(genre_queries.get(genre,genre_queries["random"]))
                     results=await search(query,10)
-                recent={t.webpage_url for t in q.played[-20:]}; recent.add(q.current.webpage_url)
-                current_title=(q.current.title or "").lower()
+                recent={t.webpage_url for t in q.played[-20:]}
+                if q.current: recent.add(q.current.webpage_url)
+                current_title=(q.current.title or "").lower() if q.current else ""
                 candidates=music_candidates(results)
                 if mode=="artist" and q.autoplay_artist:
                     candidates=[r for r in candidates if artist_match(r)]
@@ -108,7 +109,7 @@ class MusicPlayer:
                 random.shuffle(candidates)
                 candidate=candidates[0] if candidates else None
                 if candidate:
-                    track=Track(title=candidate["title"],webpage_url=candidate["webpage_url"],duration=candidate.get("duration"),thumbnail=candidate.get("thumbnail"),uploader=candidate.get("uploader"),requested_by=q.current.requested_by)
+                    track=Track(title=candidate["title"],webpage_url=candidate["webpage_url"],duration=candidate.get("duration"),thumbnail=candidate.get("thumbnail"),uploader=candidate.get("uploader"),requested_by=q.current.requested_by if q.current else 0)
             except Exception:
                 track=None
         if not track:

@@ -177,8 +177,14 @@ async def _spotify_items_from_embed(url,limit):
     return results
 
 async def _spotify_items_from_collection(url,kind,limit):
+    # Playlist API Spotify saat ini bisa menolak public playlist untuk app
+    # client-credentials. Langsung pakai public embed agar tidak buang waktu
+    # menunggu request API yang memang akan gagal.
+    if kind=="playlist":
+        return await _spotify_items_from_embed(url,limit)
+
     item_id=urlparse(url).path.rstrip("/").split("/")[-1]
-    endpoint=f"{kind}/{item_id}/items" if kind=="playlist" else f"{kind}/{item_id}/tracks"
+    endpoint=f"{kind}/{item_id}/tracks"
     try:
         out=[]
         offset=0

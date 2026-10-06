@@ -217,7 +217,8 @@ class MusicPlayer:
             track.duration=data.get("duration") or track.duration
             track.thumbnail=data.get("thumbnail") or track.thumbnail
             track.uploader=data.get("uploader") or track.uploader
-        self.record_play(guild.id,track)
+        if not (replaying and track.playback_retries > 0):
+            self.record_play(guild.id,track)
         af=[]
         if FILTERS.get(q.filter): af.append(FILTERS[q.filter])
         if q.speed!=1.0: af.append("atempo=%.2f"%q.speed)

@@ -116,7 +116,7 @@ class Music(commands.Cog):
         t=q.current
         emb=discord.Embed(title="🎵 Now Playing",description=f"**{t.title}**",url=t.webpage_url)
         if t.thumbnail: emb.set_thumbnail(url=t.thumbnail)
-        elapsed=max(0,(q.paused_at or time.monotonic())-q.started_at) if q.started_at else 0
+        elapsed=max(0,q.started_offset+(q.paused_at or time.monotonic())-q.started_at) if q.started_at else q.started_offset
         duration=t.duration or 0
         def fmt(seconds):
             seconds=max(0,int(seconds))
@@ -178,7 +178,7 @@ class Music(commands.Cog):
         q=self.player.queue_for(i.guild.id)
         if not q.current:return await i.response.send_message("Tidak ada lagu.")
         try:
-            current_pos=max(0,time.monotonic()-q.started_at) if q.started_at and not q.paused else q.position
+            current_pos=max(0,q.started_offset+(q.paused_at or time.monotonic())-q.started_at) if q.started_at and not q.paused else q.position
             if position.startswith(("+","-")): seconds=max(0,current_pos+float(position))
             elif ":" in position:
                 m,s=position.split(":",1); seconds=int(m)*60+float(s)

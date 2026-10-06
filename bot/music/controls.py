@@ -52,7 +52,7 @@ async def _kick_autoplay(interaction, player, guild_id):
         except Exception as exc:
             return False, f"Gagal masuk voice channel: {exc}"
     if not voice.is_playing() and not voice.is_paused():
-        await player.play_next(guild)
+        asyncio.create_task(player.play_next(guild))
     return True, None
 
 class QueueJumpView(discord.ui.View):

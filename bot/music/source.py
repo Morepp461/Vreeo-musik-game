@@ -37,6 +37,26 @@ def _extract(query,opts):
 async def _run(query,opts,timeout=25):
     return await asyncio.wait_for(asyncio.to_thread(_extract,query,opts),timeout=timeout)
 
+async def _run_youtube_with_fallback(query,opts,timeout=25):
+    """Keep the existing resolver path, but retry with safer public YouTube clients when one is challenged."""
+    clients=(["mweb","web_embedded","tv"],["web_embedded","tv"],["tv"])
+    last=None
+    for client_list in clients:
+        attempt={**opts,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in opts.get("extractor_args",{}).items()}}
+        attempt["extractor_args"]["youtube"]={**attempt["extractor_args"].get("youtube",{}),"player_client":client_list}
+        try:
+            info=await _run(query,attempt,timeout)
+            if info:
+                return info
+        except Exception as exc:
+            last=exc
+            text=str(exc).lower()
+            if not any(x in text for x in ("sign in to confirm","not a bot","confirm you're not a bot","login required","http error 403")):
+                raise
+    if last:
+        raise last
+    raise ValueError("Track tidak ditemukan.")
+
 def is_spotify(query:str)->bool:
     try:
         return (urlparse(query).hostname or "").lower() in {"open.spotify.com","spotify.com","www.spotify.com"}
@@ -331,7 +351,7 @@ async def resolve(query:str,requested_by:int):
     opts={**BASE,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in BASE["extractor_args"].items()}}
     if not is_url:
         opts["default_search"]="ytsearch1"
-    info=await _run(query,opts)
+    info=await _run_youtube_with_fallback(query,opts,25)
     if info.get("entries"):
         info=next((x for x in info["entries"] if x),None)
     if not info:
@@ -483,7 +503,7 @@ async def search(query:str,limit:int=5):
 
     yt_results=[]
     try:
-        info=await _run(query,opts,20)
+        info=await _run_youtube_with_fallback(query,opts,20)
         for item in info.get("entries") or []:
             if not item:
                 continue

@@ -103,7 +103,7 @@ class QueueJumpView(discord.ui.View):
         for index,t in enumerate(q.tracks[start:start+self.page_size],start+1):
             who=f"<@{t.requested_by}>" if t.requested_by else "Autoplay"
             duration=_fmt(t.duration or 0)
-            lines.append(f"**{index}.** {t.title}\n{duration} • {who}")
+            lines.append(f"**{index}.** {t.title[:80]}\n{duration} • {who}")
         e.add_field(name="UP NEXT",value="\n\n".join(lines) or "Queue kosong.",inline=False)
         if q.current:
             e.set_footer(text=f"Now: {q.current.title[:70]}")

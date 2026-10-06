@@ -121,12 +121,11 @@ class MusicPlayer:
         try: history.record(track.requested_by or 0,track.title,track.webpage_url)
         except Exception: pass
         await self.ensure_now_playing(guild)
-        retry_state={"count":0}
         def after(error):
             if error:
                 log.error("Voice player ended with error for %s: %r",track.title,error)
-                if retry_state["count"] < 1 and track.stream_url:
-                    retry_state["count"] += 1
+                if track.playback_retries < 1 and track.stream_url:
+                    track.playback_retries += 1
                     track.stream_url=None
                     track.stream_headers=None
                     q.replay_current=True
@@ -134,6 +133,7 @@ class MusicPlayer:
             self.bot.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.play_next(guild)))
         try:
             voice.play(source,after=after)
+            track.playback_retries=0
             q.last_error=None
             if q.tracks:
                 asyncio.create_task(self._prefetch_next(guild))

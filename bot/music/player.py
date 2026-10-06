@@ -140,12 +140,14 @@ class MusicPlayer:
         if not q.current: return False
         duration=q.current.duration
         q.position=max(0,min(seconds,(duration-0.5) if duration else seconds))
-        self.restart_current(guild)
+        self.restart_current(guild,preserve_position=False)
         return True
 
-    def restart_current(self,guild):
+    def restart_current(self,guild,preserve_position=True):
         q=self.queue_for(guild.id)
         if not q.current: return False
+        if preserve_position and q.started_at:
+            q.position=max(0,time.monotonic()-q.started_at)
         q.replay_current=True
         v=guild.voice_client
         if v and (v.is_playing() or v.is_paused()):

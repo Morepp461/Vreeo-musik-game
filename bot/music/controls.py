@@ -504,7 +504,7 @@ class PremiumView(discord.ui.View):
             e.add_field(name="🎤 TOP ARTISTS",value=artists,inline=False)
             e.add_field(name="🎚️ VIBES",value=genres,inline=False)
             e.set_footer(text="VREEO MUSIC • Personal Taste Profile")
-            return await interaction.response.edit_message(content=None,embed=e,view=self)
+            return await interaction.edit_original_response(content=None,embed=e,view=self)
         if value=="recap":
             await interaction.response.defer()
             data=premium.weekly(interaction.user.id)
@@ -530,7 +530,17 @@ class PremiumView(discord.ui.View):
                 url=r.get("webpage_url")
                 if url and url not in seen:
                     seen.add(url); clean.append(r)
-            clean=clean[:5]
+            filtered=[]
+            for r in clean:
+                duration=r.get("duration")
+                if duration is not None:
+                    try:
+                        if float(duration) > 480:
+                            continue
+                    except (TypeError,ValueError):
+                        pass
+                filtered.append(r)
+            clean=filtered[:5]
             if not clean:
                 return await interaction.edit_original_response(content="❌ Discovery belum menemukan hasil.",view=self)
             return await interaction.edit_original_response(content="🎧 Pilih hasil discovery untuk masuk queue:",view=DiscoveryView(self.player,self.guild_id,clean))

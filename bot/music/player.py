@@ -41,6 +41,9 @@ class MusicPlayer:
         if not track:
             q.current=None
             q.position=0
+            if not q.always_connected and guild.voice_client:
+                await guild.voice_client.disconnect(force=True)
+                self.queues.pop(guild.id,None)
             return
         if q.current is not None and track is not q.current:
             q.played.append(q.current)
@@ -50,12 +53,18 @@ class MusicPlayer:
         q.position=0
         try:
             data=await resolve(track.webpage_url,track.requested_by or 0)
-            track.stream_url=data["stream_url"]
-            track.title=data["title"] or track.title
-            track.duration=data.get("duration") or track.duration
-            track.thumbnail=data.get("thumbnail") or track.thumbnail
         except Exception:
+            q.tracks=[t for t in q.tracks if t is not track]
+            q.current=None
             return await self.play_next(guild)
+        track.stream_url=data.get("stream_url")
+        if not track.stream_url:
+            q.tracks=[t for t in q.tracks if t is not track]
+            q.current=None
+            return await self.play_next(guild)
+        track.title=data.get("title") or track.title
+        track.duration=data.get("duration") or track.duration
+        track.thumbnail=data.get("thumbnail") or track.thumbnail
         af=[]
         if FILTERS.get(q.filter): af.append(FILTERS[q.filter])
         if q.speed != 1.0: af.append(f"atempo={q.speed:.2f}")
@@ -71,18 +80,24 @@ class MusicPlayer:
             pass
         def after(error):
             self.bot.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.play_next(guild)))
-        voice.play(source,after=after)
+        try:
+            voice.play(source,after=after)
+        except Exception:
+            source.cleanup()
+            q.current=None
+            return await self.play_next(guild)
 
     async def disconnect(self,guild):
-        q=self.queue_for(guild.id)
-        q.always_connected=False
+        q=self.queues.get(guild.id)
+        if q: q.always_connected=False
         if guild.voice_client:
             await guild.voice_client.disconnect(force=True)
         self.queues.pop(guild.id,None)
 
     def skip(self,guild):
         v=guild.voice_client
-        if v and (v.is_playing() or v.is_paused()): v.stop()
+        if v and (v.is_playing() or v.is_paused()):
+            v.stop()
 
     def pause(self,guild):
         v=guild.voice_client
@@ -112,11 +127,23 @@ class MusicPlayer:
         if not q.current: return False
         duration=q.current.duration
         q.position=max(0,min(seconds,(duration-0.5) if duration else seconds))
+        self.restart_current(guild)
+        return True
+
+    def restart_current(self,guild):
+        q=self.queue_for(guild.id)
+        if not q.current: return False
+        if not q.tracks or q.tracks[0] is not q.current:
+            q.tracks.insert(0,q.current)
         v=guild.voice_client
-        if v and (v.is_playing() or v.is_paused()): v.stop()
+        if v and (v.is_playing() or v.is_paused()):
+            v.stop()
         return True
 
     def set_volume(self,guild,value):
         value=max(0,min(150,value))
-        self.queue_for(guild.id).volume=value/100
+        q=self.queue_for(guild.id)
+        q.volume=value/100
+        if guild.voice_client and guild.voice_client.is_playing():
+            self.restart_current(guild)
         return value

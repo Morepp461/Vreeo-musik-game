@@ -5,6 +5,7 @@ import os
 import re
 import json
 import time
+import logging
 from urllib.parse import urlparse
 import aiohttp
 import yt_dlp
@@ -26,6 +27,7 @@ if POT_PROVIDER_URL:
     BASE["extractor_args"]["youtubepot-bgutilhttp"]={"base_url":[POT_PROVIDER_URL]}
 _spotify_token=None
 _spotify_expires=0.0
+log=logging.getLogger(__name__)
 
 def _extract(query,opts):
     return yt_dlp.YoutubeDL(opts).extract_info(query,download=False)
@@ -304,28 +306,62 @@ async def resolve(query:str,requested_by:int):
     }
 
 async def search(query:str,limit:int=5):
+    limit=min(max(int(limit or 5),1),10)
     results=[]
+
+    # Spotify search is optional. Client-credentials may be blocked by Spotify
+    # Development Mode, so never let it kill YouTube search.
     if _spotify_configured():
         try:
-            results.extend(await spotify_search(query,limit))
-        except Exception:
-            pass
-    opts={"quiet":True,"no_warnings":True,"default_search":f"ytsearch{min(max(limit,1),10)}","skip_download":True,"extract_flat":"discard_in_playlist","extractor_args":{"youtube":{"player_client":["android_vr","web_embedded","tv"]}}}
+            results.extend(await asyncio.wait_for(spotify_search(query,limit),timeout=8))
+        except Exception as exc:
+            log.warning("Spotify search unavailable for %r: %s",query,exc)
+
+    # YouTube is the actual audio source. Keep this path independent from
+    # Spotify so /search still works when Spotify API access is restricted.
+    opts={
+        "quiet":True,
+        "no_warnings":True,
+        "noplaylist":True,
+        "default_search":f"ytsearch{limit}",
+        "skip_download":True,
+        "extract_flat":True,
+        "ignoreerrors":True,
+        "extractor_args":{
+            "youtube":{
+                "player_client":["android_vr","web_embedded","tv"]
+            }
+        },
+    }
     if POT_PROVIDER_URL:
         opts["extractor_args"]["youtubepot-bgutilhttp"]={"base_url":[POT_PROVIDER_URL]}
-    info=await _run(query,opts,20)
+
+    try:
+        info=await _run(query,opts,20)
+    except Exception as exc:
+        log.exception("YouTube search failed for %r",query)
+        if results:
+            return results[:limit]
+        raise ValueError(f"Search gagal: {exc}") from exc
+
     for item in info.get("entries") or []:
-        if not item: continue
-        item_url=item.get("webpage_url") or item.get("url")
+        if not item:
+            continue
+        item_url=item.get("webpage_url") or item.get("original_url") or item.get("url")
         if item_url and not str(item_url).startswith(("http://","https://")):
             item_url=f"https://www.youtube.com/watch?v={item_url}"
+        if not item_url:
+            continue
         results.append({
             "title":item.get("title","Unknown"),
             "webpage_url":item_url,
             "duration":item.get("duration"),
             "thumbnail":item.get("thumbnail"),
-            "uploader":item.get("uploader"),
+            "uploader":item.get("uploader") or item.get("channel"),
         })
+
+    if not results:
+        raise ValueError("Tidak ada hasil untuk pencarian itu.")
     return results[:limit]
 
 async def resolve_playlist(url:str,requested_by:int,limit:int=100):

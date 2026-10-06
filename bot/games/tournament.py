@@ -240,6 +240,21 @@ class ParticipantsButton(discord.ui.Button):
         await reply(interaction, "👥 Participants\n" + ("\n".join("• <@" + str(p["user_id"]) + ">" for p in ps) or "Belum ada peserta."))
 
 
+async def participant_names(interaction, tid):
+    ps = rows("tournament_participants", tournament_id=tid)
+    names = {}
+    for p in ps:
+        uid = str(p["user_id"])
+        member = interaction.guild.get_member(int(uid))
+        if member is None:
+            try:
+                member = await interaction.guild.fetch_member(int(uid))
+            except (discord.NotFound, discord.HTTPException):
+                member = None
+        names[uid] = member.display_name if member else "Unknown"
+    return names
+
+
 def _render_schedule(t,names=None):
     names=names or {}
     ms=sorted(rows("tournament_matches",tournament_id=t["id"]),key=lambda m:(m["round_number"],m["match_number"]))
@@ -269,8 +284,7 @@ class ScheduleButton(discord.ui.Button):
     async def callback(self, interaction):
         await interaction.response.defer(ephemeral=True)
         t=tournament(self.tid)
-        ps=rows("tournament_participants",tournament_id=self.tid)
-        names={str(p["user_id"]):(interaction.guild.get_member(int(p["user_id"])).display_name if interaction.guild.get_member(int(p["user_id"])) else "Unknown") for p in ps}
+        names = await participant_names(interaction, self.tid)
         f=_render_schedule(t,names)
         e=discord.Embed(title=f"📅 {t['name']} — Schedule",color=discord.Color.from_rgb(17,17,17))
         if f: e.set_image(url="attachment://tournament-schedule.png")
@@ -333,8 +347,7 @@ class BracketSectionButton(discord.ui.Button):
         super().__init__(label=label,style=discord.ButtonStyle.primary); self.tid=tid; self.section=section
     async def callback(self,interaction):
         await interaction.response.defer(); t=tournament(self.tid)
-        ps=rows("tournament_participants",tournament_id=self.tid)
-        names={str(p["user_id"]): (interaction.guild.get_member(int(p["user_id"])).display_name if interaction.guild.get_member(int(p["user_id"])) else "Unknown") for p in ps}
+        names = await participant_names(interaction, self.tid)
         f=_render_bracket(t,self.section,names); e=discord.Embed(title=f"🧩 {t['name']} — {self.section.title()} Bracket",color=discord.Color.from_rgb(17,17,17))
         if f: e.set_image(url="attachment://tournament-bracket.png")
         await interaction.edit_original_response(embed=e,attachments=[f] if f else [],view=BracketView(self.tid,self.section))
@@ -344,8 +357,7 @@ class BracketButton(discord.ui.Button):
         super().__init__(label="Bracket",emoji="🧩",style=discord.ButtonStyle.primary); self.tid=tid
     async def callback(self,interaction):
         await interaction.response.defer(ephemeral=True); t=tournament(self.tid)
-        ps=rows("tournament_participants",tournament_id=self.tid)
-        names={str(p["user_id"]): (interaction.guild.get_member(int(p["user_id"])).display_name if interaction.guild.get_member(int(p["user_id"])) else "Unknown") for p in ps}
+        names = await participant_names(interaction, self.tid)
         f=_render_bracket(t,"upper",names); e=discord.Embed(title=f"🧩 {t['name']} — Upper Bracket",color=discord.Color.from_rgb(17,17,17))
         if f: e.set_image(url="attachment://tournament-bracket.png")
         await interaction.followup.send(embed=e,file=f,view=BracketView(self.tid,"upper"),ephemeral=True)

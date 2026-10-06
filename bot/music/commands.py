@@ -3,7 +3,7 @@ import time
 import discord
 from discord.ext import commands
 from discord import app_commands
-from .source import resolve,search,resolve_playlist
+from .source import resolve,search,resolve_playlist,is_spotify
 from .queue import Track
 from .player import MusicPlayer
 from . import favorites,history,playlist
@@ -74,7 +74,7 @@ class Music(commands.Cog):
         v=await self.voice(i)
         if not v: raise ValueError("Masuk voice channel dulu.")
         await i.response.defer()
-        if "youtube.com/playlist" in query or "list=" in query:
+        if "youtube.com/playlist" in query or "list=" in query or (is_spotify(query) and any(f"/{kind}/" in query for kind in ("playlist","album"))):
             tracks=await resolve_playlist(query,i.user.id,MAX_PLAYLIST_SIZE)
             q=self.player.queue_for(i.guild.id)
             tracks=tracks[:max(0,MAX_QUEUE_SIZE-len(q.tracks))]

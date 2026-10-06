@@ -116,7 +116,7 @@ class Music(commands.Cog):
         t=q.current
         emb=discord.Embed(title="🎵 Now Playing",description=f"**{t.title}**",url=t.webpage_url)
         if t.thumbnail: emb.set_thumbnail(url=t.thumbnail)
-        elapsed=max(0,time.monotonic()-q.started_at) if q.started_at else 0
+        elapsed=max(0,(q.paused_at or time.monotonic())-q.started_at) if q.started_at else 0
         duration=t.duration or 0
         def fmt(seconds):
             seconds=max(0,int(seconds))

@@ -250,14 +250,32 @@ async def resolve_playlist(url:str,requested_by:int,limit:int=100):
             return [Track(**(await resolve(url,requested_by)))]
         items=await _spotify_items_from_collection(url,kind,limit)
         tracks=[]
-        for item in items:
-            try:
-                data=await resolve(_track_query(item),requested_by)
-                artist_names=", ".join(a.get("name","") for a in item.get("artists",[]) if a.get("name"))
-                data["title"]=f"{item.get('name','Unknown')}" + (f" — {artist_names}" if artist_names else "")
-                tracks.append(Track(**data))
-            except Exception:
-                continue
+        sem=asyncio.Semaphore(5)
+
+        async def resolve_item(item):
+            async with sem:
+                try:
+                    data=await asyncio.wait_for(
+                        resolve(_track_query(item),requested_by),
+                        timeout=20,
+                    )
+                    artist_names=", ".join(
+                        a.get("name","") for a in item.get("artists",[]) if a.get("name")
+                    )
+                    data["title"]=f"{item.get('name','Unknown')}" + (
+                        f" — {artist_names}" if artist_names else ""
+                    )
+                    return Track(**data)
+                except Exception:
+                    return None
+
+        results=await asyncio.gather(
+            *(resolve_item(item) for item in items),
+            return_exceptions=False,
+        )
+        tracks=[track for track in results if track is not None]
+        if not tracks:
+            raise ValueError("Spotify playlist ditemukan, tapi tidak ada track yang berhasil di-resolve.")
         return tracks
     opts={**BASE,"noplaylist":False,"extract_flat":"in_playlist"}
     info=await _run(url,opts,40)

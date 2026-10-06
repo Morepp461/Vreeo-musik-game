@@ -46,6 +46,21 @@ class Music(commands.Cog):
         self.player=MusicPlayer(bot)
         bot.music_player=self.player
 
+    @commands.Cog.listener()
+    async def on_voice_state_update(self,member,before,after):
+        if not self.bot.user or member.id!=self.bot.user.id:
+            return
+        if after.channel is None and before.channel:
+            q=self.player.queues.get(member.guild.id)
+            if q and q.always_connected:
+                await asyncio.sleep(2)
+                if member.guild.voice_client is None:
+                    try:
+                        await before.channel.connect()
+                        await self.player.play_next(member.guild)
+                    except Exception:
+                        pass
+
     async def voice(self,i):
         if not i.user.voice: return None
         ch=i.user.voice.channel

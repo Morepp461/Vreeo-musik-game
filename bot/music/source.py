@@ -21,7 +21,10 @@ BASE={
     "format":"bestaudio/best",
     "skip_download":True,
     "extractor_args":{
-        "youtube":{"player_client":["mweb"]},
+        # mweb is currently being challenged on Railway IPs. Android is the
+        # primary playback client; bgutil remains available for clients that
+        # need PO tokens.
+        "youtube":{"player_client":["android"]},
         "youtubepot-bgutilscript":{"server_home":[POT_SCRIPT_HOME]}
     },
 }
@@ -331,7 +334,19 @@ async def resolve(query:str,requested_by:int):
     opts={**BASE,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in BASE["extractor_args"].items()}}
     if not is_url:
         opts["default_search"]="ytsearch1"
-    info=await _run(query,opts)
+    try:
+        info=await _run(query,opts)
+    except Exception as first_exc:
+        # Railway/Datacenter IPs can be selectively challenged by YouTube.
+        # Retry the same URL with a different Innertube client before giving
+        # up; this is deliberately scoped to resolution so normal search/UI
+        # behavior stays unchanged.
+        fallback_opts={**opts,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in opts["extractor_args"].items()}}
+        fallback_opts["extractor_args"]["youtube"]={"player_client":["tv"]}
+        try:
+            info=await _run(query,fallback_opts)
+        except Exception:
+            raise first_exc
     if info.get("entries"):
         info=next((x for x in info["entries"] if x),None)
     if not info:
@@ -473,7 +488,7 @@ async def search(query:str,limit:int=5):
         "ignoreerrors":True,
         "extractor_args":{
             "youtube":{
-                "player_client":["mweb"]
+                "player_client":["android"]
             }
         },
     }

@@ -362,6 +362,114 @@ class StatsView(discord.ui.View):
         return e
 
 
+class VolumeModal(discord.ui.Modal, title="🔊 Volume"):
+    value=discord.ui.TextInput(label="Volume (0-150%)",placeholder="Contoh: 80",max_length=3,required=True)
+
+    def __init__(self,player,guild_id):
+        super().__init__()
+        self.player=player
+        self.guild_id=guild_id
+
+    async def on_submit(self,interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        try:
+            value=int(str(self.value.value).strip())
+            if not 0 <= value <= 150:
+                raise ValueError
+        except ValueError:
+            return await interaction.response.send_message("❌ Volume harus 0-150%.",ephemeral=True)
+        guild=self.player.bot.get_guild(self.guild_id)
+        if not guild:
+            return await interaction.response.send_message("❌ Guild tidak ditemukan.",ephemeral=True)
+        self.player.set_volume(guild,value)
+        await interaction.response.send_message(f"🔊 Volume: **{value}%**",ephemeral=True)
+        await self.player.refresh_now_playing(guild)
+
+
+class SeekModal(discord.ui.Modal, title="⏩ Seek"):
+    position=discord.ui.TextInput(label="Posisi",placeholder="1:30 atau +30 atau -15",max_length=20,required=True)
+
+    def __init__(self,player,guild_id):
+        super().__init__()
+        self.player=player
+        self.guild_id=guild_id
+
+    async def on_submit(self,interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        guild=self.player.bot.get_guild(self.guild_id)
+        q=self.player.queue_for(self.guild_id)
+        if not guild or not q.current:
+            return await interaction.response.send_message("❌ Tidak ada lagu yang sedang diputar.",ephemeral=True)
+        position=str(self.position.value).strip()
+        try:
+            current_pos=max(0,q.started_offset+(q.paused_at or time.monotonic())-q.started_at) if q.started_at and not q.paused else q.position
+            if position.startswith(("+","-")):
+                seconds=max(0,current_pos+float(position))
+            elif ":" in position:
+                m,s=position.split(":",1); seconds=int(m)*60+float(s)
+            else:
+                seconds=float(position)
+            self.player.seek(guild,seconds)
+            await interaction.response.send_message(f"⏩ Seek ke **{int(seconds)//60}:{int(seconds)%60:02d}**",ephemeral=True)
+            await self.player.refresh_now_playing(guild)
+        except (ValueError,TypeError):
+            await interaction.response.send_message("❌ Format seek tidak valid.",ephemeral=True)
+
+
+class FilterPanelView(discord.ui.View):
+    def __init__(self,player,guild_id):
+        super().__init__(timeout=60)
+        self.player=player
+        self.guild_id=guild_id
+        options=[discord.SelectOption(label=x,value=x) for x in ("off","bassboost","nightcore","vaporwave","karaoke","8d","tremolo","rotation")]
+        select=discord.ui.Select(placeholder="Pilih audio filter...",options=options)
+        select.callback=self.pick
+        self.add_item(select)
+
+    async def pick(self,interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        value=interaction.data["values"][0]
+        guild=self.player.bot.get_guild(self.guild_id)
+        if not guild:
+            return await interaction.response.send_message("❌ Guild tidak ditemukan.",ephemeral=True)
+        q=self.player.queue_for(self.guild_id)
+        q.filter=value
+        q.effects_dirty=True
+        if guild.voice_client and guild.voice_client.is_playing():
+            self.player.restart_current(guild)
+        await interaction.response.send_message(f"🎚️ Filter: **{value}**",ephemeral=True)
+        await self.player.refresh_now_playing(guild)
+
+
+class SpeedPanelView(discord.ui.View):
+    def __init__(self,player,guild_id):
+        super().__init__(timeout=60)
+        self.player=player
+        self.guild_id=guild_id
+        options=[discord.SelectOption(label=f"{x:.2f}x",value=str(x)) for x in (0.5,0.75,1.0,1.25,1.5,1.75,2.0)]
+        select=discord.ui.Select(placeholder="Pilih speed...",options=options)
+        select.callback=self.pick
+        self.add_item(select)
+
+    async def pick(self,interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Fitur ini khusus DJ/Admin.",ephemeral=True)
+        value=float(interaction.data["values"][0])
+        guild=self.player.bot.get_guild(self.guild_id)
+        if not guild:
+            return await interaction.response.send_message("❌ Guild tidak ditemukan.",ephemeral=True)
+        q=self.player.queue_for(self.guild_id)
+        q.speed=value
+        q.effects_dirty=True
+        if guild.voice_client and guild.voice_client.is_playing():
+            self.player.restart_current(guild)
+        await interaction.response.send_message(f"⏩ Speed: **{value:.2f}x**",ephemeral=True)
+        await self.player.refresh_now_playing(guild)
+
+
 class NowPlayingView(discord.ui.View):
     def __init__(self,player,guild_id:int):
         super().__init__(timeout=900)
@@ -449,15 +557,38 @@ class NowPlayingView(discord.ui.View):
         view=StatsView(self.player,self.guild_id)
         await interaction.edit_original_response(embed=view.embed(),view=view)
 
-    @discord.ui.button(label="🤖 Autoplay",style=discord.ButtonStyle.secondary,row=2)
-    async def autoplay(self,interaction:discord.Interaction,button:discord.ui.Button):
-        if not await self.guard(interaction): return
-        await interaction.response.send_message("🤖 Pilih mode autoplay:",view=AutoplayView(self.player,self.guild_id),ephemeral=True)
-
-    @discord.ui.button(label="✨ Premium",style=discord.ButtonStyle.secondary,row=4)
+    @discord.ui.button(label="✨ Premium",style=discord.ButtonStyle.secondary,row=3)
     async def premium_menu(self,interaction:discord.Interaction,button:discord.ui.Button):
         if not await self.guard(interaction): return
         await interaction.response.send_message("✨ Pilih fitur Premium:",view=PremiumView(self.player,self.guild_id),ephemeral=True)
+
+    @discord.ui.button(label="🔊 Volume",style=discord.ButtonStyle.secondary,row=3)
+    async def volume_panel(self,interaction:discord.Interaction,button:discord.ui.Button):
+        if not await self.guard(interaction): return
+        await interaction.response.send_modal(VolumeModal(self.player,self.guild_id))
+
+    @discord.ui.button(label="🎚️ Filter",style=discord.ButtonStyle.secondary,row=3)
+    async def filter_panel(self,interaction:discord.Interaction,button:discord.ui.Button):
+        if not await self.guard(interaction): return
+        await interaction.response.send_message("🎚️ Pilih filter:",view=FilterPanelView(self.player,self.guild_id),ephemeral=True)
+
+    @discord.ui.button(label="⏩ Speed",style=discord.ButtonStyle.secondary,row=4)
+    async def speed_panel(self,interaction:discord.Interaction,button:discord.ui.Button):
+        if not await self.guard(interaction): return
+        await interaction.response.send_message("⏩ Pilih speed:",view=SpeedPanelView(self.player,self.guild_id),ephemeral=True)
+
+    @discord.ui.button(label="⏱️ Seek",style=discord.ButtonStyle.secondary,row=4)
+    async def seek_panel(self,interaction:discord.Interaction,button:discord.ui.Button):
+        if not await self.guard(interaction): return
+        await interaction.response.send_modal(SeekModal(self.player,self.guild_id))
+
+    @discord.ui.button(label="🔒 24/7",style=discord.ButtonStyle.secondary,row=4)
+    async def always_panel(self,interaction:discord.Interaction,button:discord.ui.Button):
+        if not await self.guard(interaction): return
+        q=self.player.queue_for(self.guild_id)
+        q.always_connected=not q.always_connected
+        await interaction.response.send_message(f"🔒 24/7: **{'ON' if q.always_connected else 'OFF'}**",ephemeral=True)
+        await self.player.refresh_now_playing(self.guild)
 
     @discord.ui.button(emoji="📜",style=discord.ButtonStyle.secondary,row=1)
     async def queue(self,interaction:discord.Interaction,button:discord.ui.Button):

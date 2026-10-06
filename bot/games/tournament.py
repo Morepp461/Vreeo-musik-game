@@ -255,7 +255,16 @@ class JoinButton(discord.ui.Button):
         if rows("tournament_participants", tournament_id=self.tid, user_id=str(interaction.user.id)):
             return await reply(interaction, "ℹ️ Lu sudah terdaftar.")
         supabase.table("tournament_participants").insert({"tournament_id": self.tid, "user_id": str(interaction.user.id)}).execute()
-        await reply(interaction, "✅ Lu berhasil masuk tournament.")
+        ps = rows("tournament_participants", tournament_id=self.tid)
+        if len(ps) >= t["max_participants"]:
+            try:
+                await start_tournament(t)
+                await reply(interaction, "✅ Lu berhasil masuk. Slot penuh — tournament otomatis dimulai dan jadwal/bracket sudah dibuat.")
+            except Exception:
+                logging.exception("Auto-start tournament failed")
+                await reply(interaction, "✅ Lu berhasil masuk, tapi auto-generate jadwal gagal. Organizer bisa jalankan /tournament start.")
+        else:
+            await reply(interaction, "✅ Lu berhasil masuk tournament. (" + str(len(ps)) + "/" + str(t["max_participants"]) + ")")
 
 
 class Tournament(commands.Cog):
@@ -299,10 +308,15 @@ class Tournament(commands.Cog):
                 "tournament_id": tournament_id,
                 "user_id": str(member.id)
             }).execute()
+            ps = rows("tournament_participants", tournament_id=tournament_id)
+            if len(ps) >= t["max_participants"]:
+                await start_tournament(t)
+                await reply(interaction, "✅ " + member.mention + " ditambahkan. Slot penuh — tournament otomatis dimulai dan jadwal/bracket sudah dibuat.")
+            else:
+                await reply(interaction, "✅ " + member.mention + " berhasil ditambahkan. (" + str(len(ps)) + "/" + str(t["max_participants"]) + ")")
         except Exception:
             logging.exception("Tournament add participant failed")
             return await reply(interaction, "❌ Gagal menambahkan peserta.")
-        await reply(interaction, "✅ " + member.mention + " berhasil ditambahkan ke tournament.")
 
     @tournament.command(name="delete", description="Hapus tournament beserta peserta, jadwal, dan hasilnya.")
     async def delete(self, interaction, tournament_id: int):

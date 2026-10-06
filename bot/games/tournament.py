@@ -6,6 +6,8 @@ import logging
 import discord
 from discord import app_commands
 from discord.ext import commands
+from PIL import Image, ImageDraw, ImageFont
+import io
 from bot.database import supabase
 from .tournament_engine import next_round_pairings, round_robin_pairings, standings
 
@@ -64,92 +66,82 @@ async def start_tournament(t):
         random.shuffle(ids)
         size = 2 ** math.ceil(math.log2(len(ids)))
         ids += [None] * (size - len(ids))
+        upper_rounds = int(math.log2(size))
+        for rn in range(1, upper_rounds + 1):
+            count = size // (2 ** rn)
+            for mn in range(1, count + 1):
+                home = away = None
+                if rn == 1:
+                    home, away = ids[(mn - 1) * 2], ids[(mn - 1) * 2 + 1]
+                if rn == 1 and (home is None or away is None):
+                    insert_match(t["id"], rn, mn, home, away, "completed", 0, 0)
+                else:
+                    insert_match(t["id"], rn, mn, home, away)
+        lower_rounds = max(1, upper_rounds * 2 - 2)
+        for lr in range(1, lower_rounds + 1):
+            count = size // (2 ** math.ceil((lr + 2) / 2))
+            for mn in range(1, count + 1):
+                insert_match(t["id"], -lr, mn)
+        insert_match(t["id"], 0, 1)
+        await advance_double_elimination(t)
 
-        # Build the complete bracket tree up front. For 4 participants this
-        # creates 2 semifinals + 1 TBD final immediately; later rounds are
-        # populated when their feeder matches are completed.
-        current = [(ids[i], ids[i + 1]) for i in range(0, size, 2)]
-        round_number = 1
-        while len(current) >= 1:
-            for mn, pair in enumerate(current, 1):
-                home, away = pair
-                data = {
-                    "tournament_id": t["id"],
-                    "round_number": round_number,
-                    "match_number": mn,
-                    "home_team_id": str(home) if home is not None else None,
-                    "away_team_id": str(away) if away is not None else None,
-                    "status": "scheduled",
-                }
-                if round_number == 1 and (home is None or away is None):
-                    data.update({
-                        "home_score": 0,
-                        "away_score": 0,
-                        "status": "completed",
-                    })
-                supabase.table("tournament_matches").insert(data).execute()
-            if len(current) == 1:
-                break
-            current = [(None, None) for _ in range((len(current) + 1) // 2)]
-            round_number += 1
-
-        await create_next_knockout_round(t, 1)
     supabase.table("tournaments").update({"status": "active"}).eq("id", t["id"]).execute()
 
 
+async def advance_double_elimination(t):
+    ps=rows("tournament_participants",tournament_id=t["id"]); size=2**math.ceil(math.log2(len(ps))); ur=int(math.log2(size)); lrt=max(1,ur*2-2)
+    def win(m):
+        if m["status"] not in ("completed","bye"): return None
+        h,a=m["home_team_id"],m["away_team_id"]
+        if not h or not a: return h or a
+        return h if int(m["home_score"])>int(m["away_score"]) else a
+    def lose(m):
+        if m["status"]!="completed" or not m["home_team_id"] or not m["away_team_id"]: return None
+        return m["away_team_id"] if win(m)==m["home_team_id"] else m["home_team_id"]
+    for _ in range(ur+lrt+2):
+        changed=False
+        for r in range(1,ur):
+            cur=sorted(rows("tournament_matches",tournament_id=t["id"],round_number=r),key=lambda x:x["match_number"]); nxt=sorted(rows("tournament_matches",tournament_id=t["id"],round_number=r+1),key=lambda x:x["match_number"])
+            if not cur or not nxt or not all(m["status"] in ("completed","bye") for m in cur): continue
+            ws=[win(m) for m in cur]
+            for i,m in enumerate(nxt):
+                p=ws[i*2:i*2+2]; v={}
+                if len(p)>0 and p[0] and not m["home_team_id"]: v["home_team_id"]=str(p[0])
+                if len(p)>1 and p[1] and not m["away_team_id"]: v["away_team_id"]=str(p[1])
+                if v: update_match(m["id"],**v); changed=True
+        for r in range(1,lrt+1):
+            tg=sorted(rows("tournament_matches",tournament_id=t["id"],round_number=-r),key=lambda x:x["match_number"])
+            if not tg: continue
+            if r==1:
+                src=sorted(rows("tournament_matches",tournament_id=t["id"],round_number=1),key=lambda x:x["match_number"])
+                if not src or not all(m["status"] in ("completed","bye") for m in src): continue
+                inc=[lose(m) for m in src]
+            elif r%2==0:
+                su=sorted(rows("tournament_matches",tournament_id=t["id"],round_number=r//2+1),key=lambda x:x["match_number"]); sl=sorted(rows("tournament_matches",tournament_id=t["id"],round_number=-(r-1)),key=lambda x:x["match_number"])
+                if not su or not sl or not all(m["status"] in ("completed","bye") for m in su+sl): continue
+                inc=[win(m) for m in sl]+[lose(m) for m in su]
+            else:
+                sl=sorted(rows("tournament_matches",tournament_id=t["id"],round_number=-(r-1)),key=lambda x:x["match_number"])
+                if not sl or not all(m["status"] in ("completed","bye") for m in sl): continue
+                inc=[win(m) for m in sl]
+            inc=[x for x in inc if x]
+            for i,m in enumerate(tg):
+                p=inc[i*2:i*2+2]; v={}
+                if len(p)>0 and p[0] and not m["home_team_id"]: v["home_team_id"]=str(p[0])
+                if len(p)>1 and p[1] and not m["away_team_id"]: v["away_team_id"]=str(p[1])
+                if v: update_match(m["id"],**v); changed=True
+                h=v.get("home_team_id",m["home_team_id"]); a=v.get("away_team_id",m["away_team_id"])
+                if h and not a and m["status"]=="scheduled": update_match(m["id"],status="bye",home_score=0,away_score=0); changed=True
+        uf=rows("tournament_matches",tournament_id=t["id"],round_number=ur); lf=rows("tournament_matches",tournament_id=t["id"],round_number=-lrt); gf=rows("tournament_matches",tournament_id=t["id"],round_number=0)
+        if uf and lf and gf:
+            v={}; uw,lw=win(uf[0]),win(lf[0])
+            if uw and not gf[0]["home_team_id"]: v["home_team_id"]=str(uw)
+            if lw and not gf[0]["away_team_id"]: v["away_team_id"]=str(lw)
+            if v: update_match(gf[0]["id"],**v); changed=True
+        if not changed: break
+
 async def create_next_knockout_round(t, round_number):
-    current = sorted(
-        rows("tournament_matches", tournament_id=t["id"], round_number=round_number),
-        key=lambda x: x["match_number"],
-    )
-    if not current or not all(m["status"] == "completed" for m in current):
-        return
-
-    winners = [m["home_team_id"] or m["away_team_id"] for m in current]
-    if len(winners) == 1:
-        supabase.table("tournaments").update({"status": "completed"}).eq("id", t["id"]).execute()
-        return
-
-    next_round = round_number + 1
-    next_matches = sorted(
-        rows("tournament_matches", tournament_id=t["id"], round_number=next_round),
-        key=lambda x: x["match_number"],
-    )
-    pairs = next_round_pairings(winners)
-
-    # Future rounds are pre-created as TBD slots. Fill those slots instead
-    # of creating duplicate matches.
-    if next_matches:
-        for match, pair in zip(next_matches, pairs):
-            home, away = pair
-            if match["home_team_id"] is None and home is not None:
-                supabase.table("tournament_matches").update({
-                    "home_team_id": str(home),
-                }).eq("id", match["id"]).execute()
-            if match["away_team_id"] is None and away is not None:
-                supabase.table("tournament_matches").update({
-                    "away_team_id": str(away),
-                }).eq("id", match["id"]).execute()
-
-            # A slot receiving only one team is a bye and advances immediately.
-            if (home is None) != (away is None):
-                supabase.table("tournament_matches").update({
-                    "home_score": 0,
-                    "away_score": 0,
-                    "status": "completed",
-                }).eq("id", match["id"]).execute()
-        return
-
-    for mn, pair in enumerate(pairs, 1):
-        home, away = pair
-        supabase.table("tournament_matches").insert({
-            "tournament_id": t["id"],
-            "round_number": next_round,
-            "match_number": mn,
-            "home_team_id": str(home) if home is not None else None,
-            "away_team_id": str(away) if away is not None else None,
-            "status": "scheduled",
-        }).execute()
+    if t["format"]=="knockout": await advance_double_elimination(t)
 
 
 class ScoreModal(discord.ui.Modal, title="Input Skor"):
@@ -262,20 +254,56 @@ class StandingsButton(discord.ui.Button):
         await reply(interaction, "\n".join(lines))
 
 
+def _font(size,bold=False):
+    p="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    try: return ImageFont.truetype(p,size)
+    except OSError: return ImageFont.load_default()
+
+def _render_bracket(t,section):
+    ms=rows("tournament_matches",tournament_id=t["id"])
+    if section=="upper": sel=[m for m in ms if m["round_number"]>0]; title="UPPER BRACKET"; key=lambda m:m["round_number"]
+    elif section=="lower": sel=[m for m in ms if m["round_number"]<0]; title="LOWER BRACKET"; key=lambda m:abs(m["round_number"])
+    else: sel=[m for m in ms if m["round_number"]==0]; title="GRAND FINAL"; key=lambda m:1
+    if not sel: return None
+    groups={}
+    for m in sel: groups.setdefault(key(m),[]).append(m)
+    groups=sorted(groups.items()); width=max(1000,330*len(groups)); top=105; bh=62; height=max(480,top+max(len(v) for _,v in groups)*90+70)
+    img=Image.new("RGB",(width,height),(12,12,15)); d=ImageDraw.Draw(img); tf,rf,nf,bf=_font(28,True),_font(19,True),_font(14),_font(14,True)
+    d.text((30,25),f"{t['name']} • {title}",fill=(245,245,245),font=tf); boxes=[]; gap=width//len(groups)
+    for c,(rn,mm) in enumerate(groups):
+        x=c*gap+30; d.text((x,75),f"ROUND {rn}",fill=(180,180,190),font=rf)
+        for i,m in enumerate(mm):
+            y=top+i*90; bw=min(280,gap-60); d.rounded_rectangle((x,y,x+bw,y+bh),radius=9,outline=(85,85,95),width=2)
+            h=f"@{m['home_team_id']}" if m["home_team_id"] else "TBD"; a=f"@{m['away_team_id']}" if m["away_team_id"] else "TBD"; hs=str(m["home_score"]) if m["status"] in ("completed","bye") else ""; ass=str(m["away_score"]) if m["status"] in ("completed","bye") else ""
+            d.text((x+10,y+7),h[:20],fill=(245,245,245),font=bf); d.text((x+10,y+33),a[:20],fill=(195,195,205),font=nf); d.text((x+bw-45,y+7),hs,fill=(245,245,245),font=bf); d.text((x+bw-45,y+33),ass,fill=(195,195,205),font=nf); boxes.append((c,x,y,bw,bh))
+    for c in range(len(groups)-1):
+        left=[b for b in boxes if b[0]==c]; right=[b for b in boxes if b[0]==c+1]
+        for j,r in enumerate(right):
+            a=left[min(j*2,len(left)-1)]; b=left[min(j*2+1,len(left)-1)]; y1=a[2]+bh//2; y2=b[2]+bh//2; yr=r[2]+bh//2; x1=a[1]+a[3]; x2=r[1]; mid=(x1+x2)//2
+            d.line((x1,y1,mid,y1),fill=(95,95,105),width=2); d.line((x1,y2,mid,y2),fill=(95,95,105),width=2); d.line((mid,y1,mid,y2),fill=(95,95,105),width=2); d.line((mid,yr,x2,yr),fill=(95,95,105),width=2)
+    buf=io.BytesIO(); img.save(buf,"PNG"); buf.seek(0); return discord.File(buf,filename="tournament-bracket.png")
+
+class BracketView(discord.ui.View):
+    def __init__(self,tid,section="upper"):
+        super().__init__(timeout=900); self.tid=tid
+        for k,l in (("upper","⬆️ Upper"),("lower","⬇️ Lower"),("grand","🏆 Grand")):
+            b=BracketSectionButton(tid,k,l); b.disabled=k==section; self.add_item(b)
+
+class BracketSectionButton(discord.ui.Button):
+    def __init__(self,tid,section,label):
+        super().__init__(label=label,style=discord.ButtonStyle.primary); self.tid=tid; self.section=section
+    async def callback(self,interaction):
+        await interaction.response.defer(); t=tournament(self.tid); f=_render_bracket(t,self.section); e=discord.Embed(title=f"🧩 {t['name']} — {self.section.title()} Bracket",color=discord.Color.from_rgb(17,17,17))
+        if f: e.set_image(url="attachment://tournament-bracket.png")
+        await interaction.edit_original_response(embed=e,attachments=[f] if f else [],view=BracketView(self.tid,self.section))
+
 class BracketButton(discord.ui.Button):
-    def __init__(self, tid):
-        super().__init__(label="Bracket", emoji="🧩", style=discord.ButtonStyle.primary)
-        self.tid = tid
-    async def callback(self, interaction):
-        await interaction.response.defer(ephemeral=True)
-        ms = sorted(rows("tournament_matches", tournament_id=self.tid), key=lambda m: (m["round_number"], m["match_number"]))
-        lines = []
-        for m in ms:
-            h = "<@" + str(m["home_team_id"]) + ">" if m["home_team_id"] else "TBD"
-            a = "<@" + str(m["away_team_id"]) + ">" if m["away_team_id"] else "TBD"
-            result = " `" + str(m["home_score"]) + "-" + str(m["away_score"]) + "`" if m["status"] == "completed" else ""
-            lines.append("R" + str(m["round_number"]) + " M" + str(m["match_number"]) + ": " + h + " vs " + a + result)
-        await reply(interaction, "🧩 Bracket\n" + ("\n".join(lines) or "Bracket belum dibuat."))
+    def __init__(self,tid):
+        super().__init__(label="Bracket",emoji="🧩",style=discord.ButtonStyle.primary); self.tid=tid
+    async def callback(self,interaction):
+        await interaction.response.defer(ephemeral=True); t=tournament(self.tid); f=_render_bracket(t,"upper"); e=discord.Embed(title=f"🧩 {t['name']} — Upper Bracket",color=discord.Color.from_rgb(17,17,17))
+        if f: e.set_image(url="attachment://tournament-bracket.png")
+        await interaction.followup.send(embed=e,file=f,view=BracketView(self.tid,"upper"),ephemeral=True)
 
 
 class ResultsButton(discord.ui.Button):
@@ -330,7 +358,7 @@ class Tournament(commands.Cog):
 
     @tournament.command(name="create", description="Buat League atau Knock-out tournament.")
     @app_commands.describe(name="Nama tournament", format="Format", max_participants="Maksimal peserta")
-    @app_commands.choices(format=[app_commands.Choice(name="League", value="league"), app_commands.Choice(name="Knock-out", value="knockout")])
+    @app_commands.choices(format=[app_commands.Choice(name="League", value="league"), app_commands.Choice(name="Double Elimination", value="knockout")])
     async def create(self, interaction, name: str, format: app_commands.Choice[str], max_participants: app_commands.Range[int, 2, 64]):
         if not interaction.user.guild_permissions.manage_guild:
             return await reply(interaction, "❌ Butuh Manage Server untuk membuat tournament.")

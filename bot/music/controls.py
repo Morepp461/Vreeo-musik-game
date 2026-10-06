@@ -29,6 +29,42 @@ def build_now_playing_embed(q):
 from . import favorites
 from .guard import can_control
 
+class QueueJumpView(discord.ui.View):
+    def __init__(self, player, guild_id:int):
+        super().__init__(timeout=90)
+        self.player=player
+        self.guild_id=guild_id
+        q=player.queue_for(guild_id)
+        options=[]
+        for index, track in enumerate(q.tracks[:25]):
+            options.append(discord.SelectOption(label=f"{index+1}. {track.title}"[:100], value=str(index)))
+        if not options:
+            self.add_item(discord.ui.Button(label="Queue kosong", disabled=True))
+            return
+        select=discord.ui.Select(placeholder="Pilih lagu untuk langsung jump...", options=options)
+        select.callback=self.jump
+        self.add_item(select)
+
+    @property
+    def guild(self):
+        return self.player.bot.get_guild(self.guild_id)
+
+    async def jump(self, interaction:discord.Interaction):
+        if not can_control(interaction.user):
+            return await interaction.response.send_message("🔒 Kamu tidak punya akses kontrol player.",ephemeral=True)
+        q=self.player.queue_for(self.guild_id)
+        try:
+            position=int(interaction.data["values"][0])
+        except Exception:
+            return await interaction.response.send_message("❌ Pilihan queue tidak valid.",ephemeral=True)
+        if position < 0 or position >= len(q.tracks):
+            return await interaction.response.send_message("❌ Lagu itu sudah tidak ada di queue.",ephemeral=True)
+        target=q.tracks[position]
+        for _ in range(position):
+            q.played.append(q.tracks.pop(0))
+        self.player.skip(self.guild)
+        await interaction.response.send_message(f"⏭️ Jump ke **{target.title}**",ephemeral=True)
+
 class NowPlayingView(discord.ui.View):
     def __init__(self,player,guild_id:int):
         super().__init__(timeout=900)

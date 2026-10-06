@@ -147,7 +147,7 @@ class MusicPlayer:
         q=self.queue_for(guild.id)
         if not q.current: return False
         if preserve_position and q.started_at:
-            q.position=max(0,time.monotonic()-q.started_at)
+            q.position=max(0,(q.paused_at or time.monotonic())-q.started_at)
         q.replay_current=True
         v=guild.voice_client
         if v and (v.is_playing() or v.is_paused()):

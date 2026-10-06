@@ -107,6 +107,9 @@ class MusicPlayer:
 
     def skip(self,guild):
         v=guild.voice_client
+        q=self.queue_for(guild.id)
+        q.paused=False
+        q.paused_at=0.0
         if v and (v.is_playing() or v.is_paused()):
             v.stop()
 

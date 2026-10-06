@@ -240,20 +240,41 @@ class ParticipantsButton(discord.ui.Button):
         await reply(interaction, "👥 Participants\n" + ("\n".join("• <@" + str(p["user_id"]) + ">" for p in ps) or "Belum ada peserta."))
 
 
+def _render_schedule(t,names=None):
+    names=names or {}
+    ms=sorted(rows("tournament_matches",tournament_id=t["id"]),key=lambda m:(m["round_number"],m["match_number"]))
+    if not ms: return None
+    items=ms[:50]; rows_per=7; cols=max(1,min(2,math.ceil(len(items)/rows_per)))
+    cell_w,cell_h=500,82; width=cols*cell_w+60; height=125+math.ceil(len(items)/cols)*cell_h
+    img=Image.new("RGB",(width,height),(12,12,15)); d=ImageDraw.Draw(img)
+    tf,nf,bf=_font(28,True),_font(15),_font(16,True)
+    d.text((30,25),f"{t['name']} • SCHEDULE",fill=(245,245,245),font=tf)
+    for i,m in enumerate(items):
+        col=i//rows_per; row=i%rows_per; x=30+col*cell_w; y=85+row*cell_h
+        d.rounded_rectangle((x,y,x+cell_w-20,y+66),radius=9,outline=(70,70,80),width=2)
+        d.text((x+12,y+7),f"R{m['round_number']} • M{m['match_number']}",fill=(170,170,180),font=nf)
+        h=names.get(str(m["home_team_id"]),"TBD") if m["home_team_id"] else "TBD"
+        a=names.get(str(m["away_team_id"]),"TBD") if m["away_team_id"] else "TBD"
+        score=f"{m['home_score']} - {m['away_score']}" if m["status"] in ("completed","bye") else "VS"
+        d.text((x+12,y+31),h[:22],fill=(245,245,245),font=bf)
+        d.text((x+245,y+31),score,fill=(210,210,220),font=bf)
+        d.text((x+330,y+31),a[:22],fill=(205,205,215),font=nf)
+    buf=io.BytesIO(); img.save(buf,"PNG"); buf.seek(0); return discord.File(buf,filename="tournament-schedule.png")
+
+
 class ScheduleButton(discord.ui.Button):
     def __init__(self, tid):
         super().__init__(label="Schedule", emoji="📅", style=discord.ButtonStyle.secondary)
         self.tid = tid
     async def callback(self, interaction):
         await interaction.response.defer(ephemeral=True)
-        ms = sorted(rows("tournament_matches", tournament_id=self.tid), key=lambda m: (m["round_number"], m["match_number"]))
-        lines = []
-        for m in ms[:50]:
-            h = "<@" + str(m["home_team_id"]) + ">" if m["home_team_id"] else "BYE/TBD"
-            a = "<@" + str(m["away_team_id"]) + ">" if m["away_team_id"] else "BYE/TBD"
-            score = str(m["home_score"]) + "-" + str(m["away_score"]) if m["status"] == "completed" else "vs"
-            lines.append("R" + str(m["round_number"]) + " M" + str(m["match_number"]) + ": " + h + " " + score + " " + a)
-        await reply(interaction, "📅 Schedule\n" + ("\n".join(lines) or "Belum ada jadwal."))
+        t=tournament(self.tid)
+        ps=rows("tournament_participants",tournament_id=self.tid)
+        names={str(p["user_id"]):(interaction.guild.get_member(int(p["user_id"])).display_name if interaction.guild.get_member(int(p["user_id"])) else "Unknown") for p in ps}
+        f=_render_schedule(t,names)
+        e=discord.Embed(title=f"📅 {t['name']} — Schedule",color=discord.Color.from_rgb(17,17,17))
+        if f: e.set_image(url="attachment://tournament-schedule.png")
+        await interaction.followup.send(embed=e,file=f,ephemeral=True)
 
 
 class StandingsButton(discord.ui.Button):
@@ -276,7 +297,8 @@ def _font(size,bold=False):
     try: return ImageFont.truetype(p,size)
     except OSError: return ImageFont.load_default()
 
-def _render_bracket(t,section):
+def _render_bracket(t,section,names=None):
+    names = names or {}
     ms=rows("tournament_matches",tournament_id=t["id"])
     if section=="upper": sel=[m for m in ms if m["round_number"]>0]; title="UPPER BRACKET"; key=lambda m:m["round_number"]
     elif section=="lower": sel=[m for m in ms if m["round_number"]<0]; title="LOWER BRACKET"; key=lambda m:abs(m["round_number"])
@@ -291,7 +313,7 @@ def _render_bracket(t,section):
         x=c*gap+30; d.text((x,75),f"ROUND {rn}",fill=(180,180,190),font=rf)
         for i,m in enumerate(mm):
             y=top+i*90; bw=min(280,gap-60); d.rounded_rectangle((x,y,x+bw,y+bh),radius=9,outline=(85,85,95),width=2)
-            h=f"@{m['home_team_id']}" if m["home_team_id"] else "TBD"; a=f"@{m['away_team_id']}" if m["away_team_id"] else "TBD"; hs=str(m["home_score"]) if m["status"] in ("completed","bye") else ""; ass=str(m["away_score"]) if m["status"] in ("completed","bye") else ""
+            h=names.get(str(m["home_team_id"]), "TBD") if m["home_team_id"] else "TBD"; a=names.get(str(m["away_team_id"]), "TBD") if m["away_team_id"] else "TBD"; hs=str(m["home_score"]) if m["status"] in ("completed","bye") else ""; ass=str(m["away_score"]) if m["status"] in ("completed","bye") else ""
             d.text((x+10,y+7),h[:20],fill=(245,245,245),font=bf); d.text((x+10,y+33),a[:20],fill=(195,195,205),font=nf); d.text((x+bw-45,y+7),hs,fill=(245,245,245),font=bf); d.text((x+bw-45,y+33),ass,fill=(195,195,205),font=nf); boxes.append((c,x,y,bw,bh))
     for c in range(len(groups)-1):
         left=[b for b in boxes if b[0]==c]; right=[b for b in boxes if b[0]==c+1]
@@ -310,7 +332,10 @@ class BracketSectionButton(discord.ui.Button):
     def __init__(self,tid,section,label):
         super().__init__(label=label,style=discord.ButtonStyle.primary); self.tid=tid; self.section=section
     async def callback(self,interaction):
-        await interaction.response.defer(); t=tournament(self.tid); f=_render_bracket(t,self.section); e=discord.Embed(title=f"🧩 {t['name']} — {self.section.title()} Bracket",color=discord.Color.from_rgb(17,17,17))
+        await interaction.response.defer(); t=tournament(self.tid)
+        ps=rows("tournament_participants",tournament_id=self.tid)
+        names={str(p["user_id"]): (interaction.guild.get_member(int(p["user_id"])).display_name if interaction.guild.get_member(int(p["user_id"])) else "Unknown") for p in ps}
+        f=_render_bracket(t,self.section,names); e=discord.Embed(title=f"🧩 {t['name']} — {self.section.title()} Bracket",color=discord.Color.from_rgb(17,17,17))
         if f: e.set_image(url="attachment://tournament-bracket.png")
         await interaction.edit_original_response(embed=e,attachments=[f] if f else [],view=BracketView(self.tid,self.section))
 
@@ -318,7 +343,10 @@ class BracketButton(discord.ui.Button):
     def __init__(self,tid):
         super().__init__(label="Bracket",emoji="🧩",style=discord.ButtonStyle.primary); self.tid=tid
     async def callback(self,interaction):
-        await interaction.response.defer(ephemeral=True); t=tournament(self.tid); f=_render_bracket(t,"upper"); e=discord.Embed(title=f"🧩 {t['name']} — Upper Bracket",color=discord.Color.from_rgb(17,17,17))
+        await interaction.response.defer(ephemeral=True); t=tournament(self.tid)
+        ps=rows("tournament_participants",tournament_id=self.tid)
+        names={str(p["user_id"]): (interaction.guild.get_member(int(p["user_id"])).display_name if interaction.guild.get_member(int(p["user_id"])) else "Unknown") for p in ps}
+        f=_render_bracket(t,"upper",names); e=discord.Embed(title=f"🧩 {t['name']} — Upper Bracket",color=discord.Color.from_rgb(17,17,17))
         if f: e.set_image(url="attachment://tournament-bracket.png")
         await interaction.followup.send(embed=e,file=f,view=BracketView(self.tid,"upper"),ephemeral=True)
 

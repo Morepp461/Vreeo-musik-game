@@ -1,5 +1,4 @@
 import asyncio
-import asyncio
 import time
 import discord
 from discord.ext import commands
@@ -34,6 +33,7 @@ class SearchView(discord.ui.View):
                 return await interaction.response.send_message("Masuk voice channel dulu.",ephemeral=True)
             r=self.results[index]
             q=self.cog.player.queue_for(interaction.guild.id)
+            q.panel_channel_id=interaction.channel.id
             if len(q.tracks)>=MAX_QUEUE_SIZE:
                 return await interaction.response.send_message("Queue sudah penuh.",ephemeral=True)
             if (q.current and q.current.webpage_url==r["webpage_url"]) or any(t.webpage_url==r["webpage_url"] for t in q.tracks):
@@ -89,6 +89,7 @@ class Music(commands.Cog):
         if "youtube.com/playlist" in query or "list=" in query or (is_spotify(query) and any(f"/{kind}/" in query for kind in ("playlist","album"))):
             tracks=await resolve_playlist(query,i.user.id,MAX_PLAYLIST_SIZE)
             q=self.player.queue_for(i.guild.id)
+            q.panel_channel_id=i.channel.id
             tracks=tracks[:max(0,MAX_QUEUE_SIZE-len(q.tracks))]
             for t in tracks: q.add(t)
             text=f"📚 **{len(tracks)}** track masuk queue."
@@ -96,6 +97,7 @@ class Music(commands.Cog):
         else:
             data=await resolve(query,i.user.id)
             q=self.player.queue_for(i.guild.id)
+            q.panel_channel_id=i.channel.id
             if len(q.tracks)>=MAX_QUEUE_SIZE: raise ValueError("Queue sudah penuh.")
             if (q.current and q.current.webpage_url==data["webpage_url"]) or any(t.webpage_url==data["webpage_url"] for t in q.tracks):
                 raise ValueError("Track itu sudah ada di queue.")
@@ -125,27 +127,6 @@ class Music(commands.Cog):
             text="\n".join(f"**{n}.** {r['title']}" for n,r in enumerate(results,1))
             await i.followup.send(text,view=SearchView(self,i,results))
         except Exception as e: await i.followup.send(f"❌ {e}")
-
-    @app_commands.command(name="nowplaying",description="Tampilkan lagu yang sedang diputar")
-    async def nowplaying(self,i):
-        if await reject_channel(i): return
-        q=self.player.queue_for(i.guild.id)
-        if not q.current:return await i.response.send_message("Tidak ada lagu.")
-        t=q.current
-        emb=discord.Embed(title="🎵 Now Playing",description=f"**{t.title}**",url=t.webpage_url)
-        if t.thumbnail: emb.set_thumbnail(url=t.thumbnail)
-        elapsed=max(0,q.started_offset+(q.paused_at or time.monotonic())-q.started_at) if q.started_at else q.started_offset
-        duration=t.duration or 0
-        def fmt(seconds):
-            seconds=max(0,int(seconds))
-            return f"{seconds//60}:{seconds%60:02d}"
-        progress=f"{fmt(elapsed)} / {fmt(duration)}" if duration else fmt(elapsed)
-        emb.add_field(name="Progress",value=progress,inline=True)
-        emb.add_field(name="Request",value=f"<@{t.requested_by}>" if t.requested_by else "-",inline=True)
-        emb.add_field(name="Volume",value=f"{int(q.volume*100)}%",inline=True)
-        emb.add_field(name="Loop",value=q.loop,inline=True)
-        emb.add_field(name="Filter",value=q.filter,inline=True)
-        await i.response.send_message(embed=emb,view=NowPlayingView(self.player,i.guild.id))
 
     @app_commands.command(name="pause",description="Pause")
     async def pause(self,i):

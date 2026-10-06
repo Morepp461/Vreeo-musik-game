@@ -31,7 +31,7 @@ from .guard import can_control
 
 class QueueJumpView(discord.ui.View):
     def __init__(self, player, guild_id:int):
-        super().__init__(timeout=90)
+        super().__init__(timeout=900)
         self.player=player
         self.guild_id=guild_id
         q=player.queue_for(guild_id)
@@ -50,20 +50,25 @@ class QueueJumpView(discord.ui.View):
         return self.player.bot.get_guild(self.guild_id)
 
     async def jump(self, interaction:discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         if not can_control(interaction.user):
-            return await interaction.response.send_message("🔒 Kamu tidak punya akses kontrol player.",ephemeral=True)
+            return await interaction.edit_original_response(content="🔒 Kamu tidak punya akses kontrol player.")
         q=self.player.queue_for(self.guild_id)
         try:
             position=int(interaction.data["values"][0])
         except Exception:
-            return await interaction.response.send_message("❌ Pilihan queue tidak valid.",ephemeral=True)
+            return await interaction.edit_original_response(content="❌ Pilihan queue tidak valid.")
         if position < 0 or position >= len(q.tracks):
-            return await interaction.response.send_message("❌ Lagu itu sudah tidak ada di queue.",ephemeral=True)
+            return await interaction.edit_original_response(content="❌ Lagu itu sudah tidak ada di queue.")
         target=q.tracks[position]
         for _ in range(position):
             q.played.append(q.tracks.pop(0))
-        self.player.skip(self.guild)
-        await interaction.response.send_message(f"⏭️ Jump ke **{target.title}**",ephemeral=True)
+        voice=self.guild.voice_client if self.guild else None
+        if voice and (voice.is_playing() or voice.is_paused()):
+            self.player.skip(self.guild)
+        else:
+            await self.player.play_next(self.guild)
+        await interaction.edit_original_response(content=f"⏭️ Jump ke **{target.title}**")
 
 class NowPlayingView(discord.ui.View):
     def __init__(self,player,guild_id:int):
@@ -135,8 +140,9 @@ class NowPlayingView(discord.ui.View):
 
     @discord.ui.button(emoji="📜",style=discord.ButtonStyle.secondary,row=1)
     async def queue(self,interaction:discord.Interaction,button:discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
         q=self.player.queue_for(self.guild_id)
         if not q.tracks:
-            return await interaction.response.send_message("Queue kosong.",ephemeral=True)
+            return await interaction.edit_original_response(content="Queue kosong.")
         text="\n".join(f"**{n}.** {t.title}" for n,t in enumerate(q.tracks[:25],1))
-        await interaction.response.send_message(f"### 📜 Queue\n{text}",view=QueueJumpView(self.player,self.guild_id),ephemeral=True)
+        await interaction.edit_original_response(content=f"### 📜 Queue\n{text}",view=QueueJumpView(self.player,self.guild_id))

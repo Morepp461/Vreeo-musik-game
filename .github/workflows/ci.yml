@@ -17,3 +17,4 @@ jobs:
       - run: python -m pip install -r requirements.txt pytest
       - run: python -m compileall -q bot
       - run: pytest -q
+      - run: docker build -t vreeo-music-games:ci .

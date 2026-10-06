@@ -77,7 +77,9 @@ class MusicPlayer:
             track=q.pop_next()
         if track is not None and not replaying:
             track.playback_retries=0
+        autoplay_generated=False
         if not track and q.autoplay:
+            autoplay_generated=True
             try:
                 genre_queries={
                     "random":("popular songs","latest music","indie music","r&b songs","dance music","chill music","rock songs","electronic music","top songs"),
@@ -195,7 +197,7 @@ class MusicPlayer:
                 return False
             track.stream_url=data.get("stream_url")
             track.stream_headers=data.get("stream_headers") or track.stream_headers
-            if track is q.current and q.autoplay and track.duration and track.duration > 480:
+            if autoplay_generated and track.duration and track.duration > 480:
                 q.last_error="Autoplay skipped a track longer than 8 minutes."
                 q.current=None
                 q.position=0

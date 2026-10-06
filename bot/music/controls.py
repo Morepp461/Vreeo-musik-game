@@ -258,6 +258,77 @@ class GenreAutoplayView(discord.ui.View):
         await interaction.response.edit_message(content="🤖 Pilih mode autoplay:",view=AutoplayView(self.player,self.guild_id))
 
 
+class LyricsView(discord.ui.View):
+    def __init__(self,player,guild_id,title,artist,lyrics):
+        super().__init__(timeout=900)
+        self.player=player
+        self.guild_id=guild_id
+        self.title=title
+        self.artist=artist
+        clean=re.sub(r"\[\d{1,3}:\d{2}(?:\.\d+)?\]\s*","",lyrics).strip()
+        self.pages=[clean[i:i+3500] for i in range(0,len(clean),3500)] or ["Lirik kosong."]
+        self.page=0
+        self._build()
+
+    def _build(self):
+        self.clear_items()
+        prev=discord.ui.Button(label="◀️",style=discord.ButtonStyle.secondary,disabled=self.page<=0,row=1)
+        next_=discord.ui.Button(label="▶️",style=discord.ButtonStyle.secondary,disabled=self.page>=len(self.pages)-1,row=1)
+        back=discord.ui.Button(label="↩️ Now Playing",style=discord.ButtonStyle.primary,row=1)
+        prev.callback=self.previous
+        next_.callback=self.next_page
+        back.callback=self.back
+        self.add_item(prev)
+        self.add_item(next_)
+        self.add_item(back)
+
+    def embed(self):
+        e=discord.Embed(title="🎤 VREEO MUSIC  •  LYRICS",description=self.pages[self.page])
+        e.add_field(name="TRACK",value=self.title[:100],inline=True)
+        if self.artist: e.add_field(name="ARTIST",value=self.artist[:100],inline=True)
+        e.set_footer(text=f"Page {self.page+1}/{len(self.pages)} • VREEO MUSIC")
+        return e
+
+    async def previous(self,interaction):
+        self.page=max(0,self.page-1)
+        self._build()
+        await interaction.response.edit_message(embed=self.embed(),view=self)
+
+    async def next_page(self,interaction):
+        self.page=min(len(self.pages)-1,self.page+1)
+        self._build()
+        await interaction.response.edit_message(embed=self.embed(),view=self)
+
+    async def back(self,interaction):
+        guild=self.player.bot.get_guild(self.guild_id)
+        if not guild:
+            return await interaction.response.send_message("Guild tidak ditemukan.",ephemeral=True)
+        await interaction.response.edit_message(embed=build_now_playing_embed(self.player.queue_for(self.guild_id)),view=NowPlayingView(self.player,self.guild_id))
+
+
+class StatsView(discord.ui.View):
+    def __init__(self,player,guild_id):
+        super().__init__(timeout=600)
+        self.player=player
+        self.guild_id=guild_id
+
+    def embed(self):
+        s=self.player.stats_for(self.guild_id)
+        songs=sorted(s["songs"].items(),key=lambda x:x[1],reverse=True)[:5]
+        artists=sorted(s["artists"].items(),key=lambda x:x[1],reverse=True)[:5]
+        users=sorted(s["users"].items(),key=lambda x:x[1],reverse=True)[:5]
+        hours=s["seconds"]/3600
+        song_text="\n".join(f"**{i}.** {name[:55]} — {count}x" for i,(name,count) in enumerate(songs,1)) or "Belum ada data."
+        artist_text="\n".join(f"**{i}.** {name[:55]} — {count}x" for i,(name,count) in enumerate(artists,1)) or "Belum ada data."
+        user_text="\n".join(f"**{i}.** <@{uid}> — {count}x" for i,(uid,count) in enumerate(users,1) if uid!="0") or "Belum ada data."
+        e=discord.Embed(title="✦ VREEO MUSIC  •  STATS",description=f"**{s['plays']}** plays • **{hours:.1f} jam** listening time")
+        e.add_field(name="🔥 TOP SONGS",value=song_text,inline=False)
+        e.add_field(name="🎤 TOP ARTISTS",value=artist_text,inline=False)
+        e.add_field(name="👑 TOP REQUESTERS",value=user_text,inline=False)
+        e.set_footer(text="VREEO MUSIC • Runtime stats")
+        return e
+
+
 class NowPlayingView(discord.ui.View):
     def __init__(self,player,guild_id:int):
         super().__init__(timeout=900)
@@ -326,6 +397,25 @@ class NowPlayingView(discord.ui.View):
         await self.player.disconnect(self.guild)
         await interaction.response.send_message("⏹️ Stop.",ephemeral=True)
 
+    @discord.ui.button(emoji="🎤",label="Lyrics",style=discord.ButtonStyle.secondary,row=3)
+    async def lyrics(self,interaction:discord.Interaction,button:discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        q=self.player.queue_for(self.guild_id)
+        if not q.current:
+            return await interaction.edit_original_response(content="Tidak ada lagu yang sedang diputar.")
+        data=await fetch_lyrics(q.current.title,q.current.uploader)
+        if not data:
+            return await interaction.edit_original_response(content="🎤 Lirik tidak ditemukan untuk lagu ini.")
+        lyrics=data.get("synced") or data.get("plain") or ""
+        view=LyricsView(self.player,self.guild_id,data.get("title") or q.current.title,data.get("artist") or q.current.uploader,lyrics)
+        await interaction.edit_original_response(embed=view.embed(),view=view)
+
+    @discord.ui.button(emoji="📊",label="Stats",style=discord.ButtonStyle.secondary,row=3)
+    async def stats(self,interaction:discord.Interaction,button:discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        view=StatsView(self.player,self.guild_id)
+        await interaction.edit_original_response(embed=view.embed(),view=view)
+
     @discord.ui.button(label="🤖 Autoplay",style=discord.ButtonStyle.secondary,row=2)
     async def autoplay(self,interaction:discord.Interaction,button:discord.ui.Button):
         if not await self.guard(interaction): return
@@ -337,5 +427,5 @@ class NowPlayingView(discord.ui.View):
         q=self.player.queue_for(self.guild_id)
         if not q.tracks:
             return await interaction.edit_original_response(content="Queue kosong.")
-        text="\n".join(f"**{n}.** {t.title}" for n,t in enumerate(q.tracks[:25],1))
-        await interaction.edit_original_response(content=f"### 📜 Queue\n{text}",view=QueueJumpView(self.player,self.guild_id))
+        view=QueueJumpView(self.player,self.guild_id)
+        await interaction.edit_original_response(embed=view.embed(),view=view)

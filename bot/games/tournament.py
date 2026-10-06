@@ -276,6 +276,27 @@ class Tournament(commands.Cog):
         t = tournament(tournament_id)
         await interaction.response.send_message(embed=await embed(t), view=Dashboard(t))
 
+    @tournament.command(name="score", description="Input skor berdasarkan Match ID.")
+    async def score(self, interaction, tournament_id: int, match_id: int, home_score: int, away_score: int):
+        t = tournament(tournament_id)
+        if not t or t["guild_id"] != interaction.guild_id:
+            return await reply(interaction, "❌ Tournament tidak ditemukan.")
+        if not can_manage(interaction, t):
+            return await reply(interaction, "❌ Hanya organizer / Manage Server.")
+        match = rows("tournament_matches", id=match_id, tournament_id=tournament_id)
+        if not match:
+            return await reply(interaction, "❌ Match tidak ditemukan.")
+        if match[0]["status"] != "scheduled":
+            return await reply(interaction, "❌ Match sudah selesai.")
+        if home_score < 0 or away_score < 0:
+            return await reply(interaction, "❌ Skor tidak boleh negatif.")
+        if t["format"] == "knockout" and home_score == away_score:
+            return await reply(interaction, "⚠️ Knock-out tidak boleh seri. Masukkan skor final setelah extra time/penalty.")
+        supabase.table("tournament_matches").update({"home_score": home_score, "away_score": away_score, "status": "completed"}).eq("id", match_id).execute()
+        if t["format"] == "knockout":
+            await create_next_knockout_round(t, match[0]["round_number"])
+        await interaction.response.send_message("✅ Skor tersimpan dan logic tournament diperbarui.", ephemeral=True)
+
     @tournament.command(name="panel", description="Buka dashboard tournament.")
     async def panel(self, interaction, tournament_id: int):
         t = tournament(tournament_id)

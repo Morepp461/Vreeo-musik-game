@@ -133,7 +133,8 @@ class CareerHubView(discord.ui.View):
         c=get_character(i.user.id,i.guild.id)
         if not c or c["id"]!=self.character_id:return await i.response.send_message("❌ Ini bukan dashboard karaktermu.",ephemeral=True)
         await i.response.edit_message(embed=discord.Embed(title="🎯 Quest Profesi",description="Memuat kondisi dunia...",color=discord.Color.blurple()),view=QuestView(self.character_id))
-\n    @discord.ui.button(label="Status Kerja",emoji="📋",style=discord.ButtonStyle.success)
+
+    @discord.ui.button(label="Status Kerja",emoji="📋",style=discord.ButtonStyle.success)
     async def status(self,i,b):
         try:
             rows=supabase.table("game_character_jobs").select("id,job_id,salary,skill,status,started_at,performance,position_level,career_xp,employer_institution_id,position_title").eq("character_id",self.character_id).eq("status","active").limit(1).execute().data or []

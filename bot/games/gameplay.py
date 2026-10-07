@@ -3,7 +3,7 @@ import discord
 from ..database import supabase
 from .player import get_character, money
 
-CITIES=["Jakarta","Bandung","Semarang","Yogyakarta","Surabaya","Malang","Tangerang","Medan","Palembang","Pekanbaru","Denpasar","Balikpapan"]
+CITIES=["Jakarta","Bandung","Semarang","Yogyakarta","Surabaya","Malang","Tangerang","Medan","Palembang","Pekanbaru","Denpasar","Balikpapan","Makassar","Jayapura"]
 
 ACTIONS={
     "eat":("🍚 Makan","Rp25.000"),

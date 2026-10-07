@@ -84,7 +84,6 @@ class ActionView(discord.ui.View):
                 row=result[0] if isinstance(result,list) else result
                 msg=f"**{row['action_name']} berhasil.**\n{row['outcome']}\n💵 Tunai: **{money(row['cash'])}**"
                 await interaction.response.send_message(msg,ephemeral=True)
-                await maybe_create_event(self.character_id,interaction)
             except Exception as exc:
                 await interaction.response.send_message("❌ "+_err(exc),ephemeral=True)
         return callback

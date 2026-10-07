@@ -157,21 +157,32 @@ class TravelView(discord.ui.View):
 
 class ShopView(discord.ui.View):
     def __init__(self,character_id):
-        super().__init__(timeout=300)
-        self.character_id=character_id
-        for key,name,price in SHOP_ITEMS:
-            b=discord.ui.Button(label=f"{name} — {money(price)}",style=discord.ButtonStyle.success)
-            b.callback=self._make_callback(key,name,price)
+        super().__init__(timeout=300); self.character_id=character_id
+        items=supabase.table("game_market").select("item_key,item_name,price,stock").eq("active",True).order("item_name").limit(25).execute().data or []
+        for item in items:
+            label=str(item["item_name"])[:55]+" — "+money(item["price"])
+            b=discord.ui.Button(label=label,style=discord.ButtonStyle.success)
+            b.callback=self._make_callback(item["item_key"],item["item_name"])
             self.add_item(b)
-    def _make_callback(self,key,name,price):
+        back=discord.ui.Button(label="Refresh Toko",emoji="🔄",style=discord.ButtonStyle.secondary)
+        back.callback=self._refresh
+        self.add_item(back)
+
+    async def _refresh(self,interaction):
+        c=get_character(interaction.user.id,interaction.guild.id)
+        if not c or c["id"]!=self.character_id:
+            return await interaction.response.send_message("❌ Ini bukan karaktermu.",ephemeral=True)
+        await interaction.response.edit_message(embed=action_embed(c),view=ShopView(self.character_id))
+
+    def _make_callback(self,key,name):
         async def callback(interaction):
             c=get_character(interaction.user.id,interaction.guild.id)
             if not c or c["id"]!=self.character_id:
                 return await interaction.response.send_message("❌ Ini bukan karaktermu.",ephemeral=True)
             try:
-                result=supabase.rpc("game_buy_item",{"p_character_id":self.character_id,"p_item_key":key,"p_item_name":name,"p_price":price}).execute().data
+                result=supabase.rpc("game_buy_market_item",{"p_character_id":self.character_id,"p_item_key":key,"p_quantity":1}).execute().data
                 row=result[0] if isinstance(result,list) else result
-                await interaction.response.send_message(f"🛍️ **{name}** berhasil dibeli.\n💵 Tunai: **{money(row['cash'])}**",ephemeral=True)
+                await interaction.response.send_message("🛍️ **"+str(name)+"** berhasil dibeli.\n💵 Tunai: **"+money(row["cash_after"])+"**",ephemeral=True)
             except Exception as exc:
                 await interaction.response.send_message("❌ "+_err(exc),ephemeral=True)
         return callback

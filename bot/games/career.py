@@ -20,6 +20,7 @@ def _err(exc):
         "WORKPLACE_UNAVAILABLE":"Belum ada tempat kerja yang sesuai di kotamu.",
         "QUEST_NOT_FOUND":"Quest sudah tidak tersedia.",
         "JOB_NOT_ACTIVE":"Pekerjaan sudah tidak aktif.",
+        "SALARY_BELOW_MINIMUM_WAGE":"Gaji tidak boleh di bawah upah minimum kota.",
     }
     for k,v in m.items():
         if k in s:return v

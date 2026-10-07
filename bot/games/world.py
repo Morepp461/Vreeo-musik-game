@@ -162,7 +162,13 @@ async def reconcile_companies(guild: discord.Guild):
         role = discord.utils.get(guild.roles, name=f"WNI | Company | {b['name']}")
         if role is None:
             role = await guild.create_role(name=f"WNI | Company | {b['name']}", reason="WNI company registration")
-        owner = supabase.table("game_characters").select("discord_user_id").eq("id",b["owner_character_id"]).limit(1).execute().data\n        if owner:\n            member = guild.get_member(int(owner[0]["discord_user_id"]))\n            if member and role not in member.roles:\n                try: await member.add_roles(role, reason="WNI company owner assignment")\n                except Exception: pass\n        channel = guild.get_channel(int(b["discord_channel_id"])) if b.get("discord_channel_id") else None
+        owner = supabase.table("game_characters").select("discord_user_id").eq("id",b["owner_character_id"]).limit(1).execute().data
+        if owner:
+            member = guild.get_member(int(owner[0]["discord_user_id"]))
+            if member and role not in member.roles:
+                try: await member.add_roles(role, reason="WNI company owner assignment")
+                except Exception: pass
+        channel = guild.get_channel(int(b["discord_channel_id"])) if b.get("discord_channel_id") else None
         if not isinstance(channel, discord.TextChannel):
             channel = await guild.create_text_channel(f"company-{b['business_key'][:80]}", category=category, overwrites={guild.default_role: discord.PermissionOverwrite(view_channel=False), role: discord.PermissionOverwrite(view_channel=True, send_messages=True)}, reason="WNI company channel")
         supabase.table("game_businesses").update({"discord_role_id":str(role.id),"discord_channel_id":str(channel.id)}).eq("id",b["id"]).execute()

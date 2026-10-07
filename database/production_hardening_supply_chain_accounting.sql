@@ -56,11 +56,11 @@ begin
         updated_at=now();
 
   update game_businesses
-  set cash=cash-total, updated_at=now()
+  set cash=cash-total
   where id=b.id;
 
   update game_businesses
-  set cash=cash+total, updated_at=now()
+  set cash=cash+total
   where id=supplier.id;
 
   update game_supply_chain

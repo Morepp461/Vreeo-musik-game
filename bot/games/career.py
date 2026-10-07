@@ -112,6 +112,24 @@ class CareerHubView(discord.ui.View):
             e.add_field(name="Mulai",value=str(x["started_at"])[:10],inline=True)
             await i.response.edit_message(embed=e,view=CareerHubView(self.character_id))
         except Exception as e:await i.response.send_message("❌ "+_err(e),ephemeral=True)
+    @discord.ui.button(label="Pemerintahan Kota",emoji="🏛️",style=discord.ButtonStyle.secondary,row=1)
+    async def citygov(self,i,b):
+        rows=supabase.table("game_city_governments").select("city_id,mayor_name,approval,budget,tax_rate,revenue_monthly,expense_monthly,policy_key,term_ends_at").limit(20).execute().data or []
+        city=get_character(i.user.id,i.guild.id)
+        row=None
+        if city:
+            c=supabase.table("game_cities").select("id").eq("name",city["city"]).limit(1).execute().data
+            if c: row=next((x for x in rows if x["city_id"]==c[0]["id"]),None)
+        if not row:return await i.response.send_message("❌ Data pemerintahan kota belum tersedia.",ephemeral=True)
+        e=discord.Embed(title=f"🏛️ Pemerintahan {city['city']}",color=discord.Color.dark_red())
+        e.add_field(name="Wali Kota",value=row["mayor_name"] or "Belum ditentukan",inline=True)
+        e.add_field(name="Approval",value=f"{row['approval']}/100",inline=True)
+        e.add_field(name="Pajak",value=f"{float(row['tax_rate'])*100:.2f}%",inline=True)
+        e.add_field(name="Anggaran",value=money(row["budget"]),inline=True)
+        e.add_field(name="Pendapatan/bln",value=money(row["revenue_monthly"]),inline=True)
+        e.add_field(name="Belanja/bln",value=money(row["expense_monthly"]),inline=True)
+        e.add_field(name="Kebijakan",value=row["policy_key"] or "Belum ada",inline=True)
+        await i.response.edit_message(embed=e,view=CareerHubView(self.character_id))
     @discord.ui.button(label="Resign",emoji="📤",style=discord.ButtonStyle.danger)
     async def resign(self,i,b):
         c=get_character(i.user.id,i.guild.id)

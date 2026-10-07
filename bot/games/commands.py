@@ -6,6 +6,8 @@ from .world import bootstrap_guild, GAME_NAME
 from .player import get_character, get_wallet, get_needs, get_inventory, get_assets, profile_embed, inventory_text, assets_text, RegisterView, money
 from ..database import supabase
 
+GODMODE_OWNER_ID = 1441030290280550513
+
 class PlayerView(discord.ui.View):
     def __init__(self, character):
         super().__init__(timeout=300)
@@ -79,8 +81,10 @@ class Games(commands.Cog):
         await interaction.response.send_message(embed=profile_embed(character), view=PlayerView(character), ephemeral=True)
 
     @app_commands.command(name="godmode", description="Dashboard kontrol God Mode WNI SIMULATOR.")
-    @app_commands.checks.has_permissions(administrator=True)
     async def godmode(self, interaction: discord.Interaction):
+        if interaction.user.id != GODMODE_OWNER_ID:
+            return await interaction.response.send_message("❌ Kamu tidak memiliki akses God Mode.", ephemeral=True)
+
         state = supabase.table("game_world_state").select("*").eq("id", 1).limit(1).execute()
         row = state.data[0] if state.data else {}
         e = discord.Embed(title="👑 WNI SIMULATOR — GOD MODE", description="Kontrol dunia melalui engine + database, dengan audit.", color=discord.Color.gold())
@@ -89,14 +93,8 @@ class Games(commands.Cog):
         e.add_field(name="Economy Multiplier", value=str(row.get("economy_multiplier",1)), inline=True)
         e.add_field(name="Inflasi", value=str(row.get("inflation_rate",0)), inline=True)
         e.add_field(name="Simulasi", value="PAUSED" if row.get("paused") else "RUNNING", inline=True)
-        e.set_footer(text="God Mode hanya untuk administrator server.")
+        e.set_footer(text="God Mode dikunci ke pemilik bot.")
         await interaction.response.send_message(embed=e, ephemeral=True)
-
-    @godmode.error
-    async def godmode_error(self, interaction, error):
-        if isinstance(error, app_commands.errors.MissingPermissions):
-            return await interaction.response.send_message("❌ God Mode hanya untuk administrator server.", ephemeral=True)
-        raise error
 
 async def setup(bot):
     await bot.add_cog(Games(bot))

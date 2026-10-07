@@ -6,7 +6,7 @@ STARTING_CASH=250_000
 CITIES=[('DKI Jakarta','Jakarta'),('Jawa Barat','Bandung'),('Jawa Tengah','Semarang'),('DI Yogyakarta','Yogyakarta'),('Jawa Timur','Surabaya'),('Jawa Timur','Malang'),('Banten','Tangerang'),('Sumatera Utara','Medan'),('Sumatera Selatan','Palembang'),('Riau','Pekanbaru'),('Bali','Denpasar'),('Kalimantan Timur','Balikpapan'),('Sulawesi Selatan','Makassar'),('Papua','Jayapura')]
 
 def get_character(user_id,guild_id):
-    r=supabase.table('game_characters').select('*').eq('discord_user_id',str(user_id)).eq('guild_id',str(guild_id)).limit(1).execute()
+    r=supabase.table('game_characters').select('*').eq('discord_user_id',str(user_id)).eq('guild_id',str(guild_id)).eq('status','active').order('created_at',desc=True).limit(1).execute()
     return r.data[0] if r.data else None
 def get_wallet(character_id):
     r=supabase.table('game_wallets').select('*').eq('character_id',character_id).limit(1).execute()

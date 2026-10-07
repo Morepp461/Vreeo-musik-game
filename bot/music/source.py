@@ -41,7 +41,7 @@ async def _run_youtube_with_fallback(query,opts,timeout=25):
     """Resolve with clients that currently produce playable YouTube CDN URLs."""
     # YouTube has recently returned valid-looking googlevideo URLs that FFmpeg
     # immediately rejects with 403. Try Android first, then public clients.
-    clients=(["android"],["web_embedded"],["tv"])
+    clients=(["mweb"],["tv"],["android"])
     last=None
     for client_list in clients:
         attempt={**opts,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in opts.get("extractor_args",{}).items()}}

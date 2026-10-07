@@ -103,7 +103,7 @@ begin
    end if;
   end if;
  end loop;
- insert into public.game_government_ticks(tick_key,policies_applied,elections_started,elections_completed,approval_changes,notes) values('loan:'||key,0,0,0,0,0,format('bank loan tick: checked=%s overdue=%s defaulted=%s',checked,overdue,defaulted));
+ insert into public.game_government_ticks(tick_key,policies_applied,elections_started,elections_completed,approval_changes,notes) values('loan:'||key,0,0,0,0,format('bank loan tick: checked=%s overdue=%s defaulted=%s',checked,overdue,defaulted));
  return jsonb_build_object('success',true,'already_processed',false,'tick_key',key,'checked',checked,'overdue',overdue,'defaulted',defaulted);
 end $function$;
 revoke all on function public.game_run_bank_loan_tick(text) from public,anon,authenticated;

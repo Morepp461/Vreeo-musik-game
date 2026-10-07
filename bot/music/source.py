@@ -44,6 +44,8 @@ async def _run_youtube_with_fallback(query,opts,timeout=25):
     # is unsafe here: current YouTube GVS can return HTTP 403 even when the
     # PO token was generated successfully.
     attempts=(
+        (["android_vr"], "bestaudio/best"),
+        (["android"], "bestaudio/best"),
         (["web_safari"], "bestaudio/best"),
         (None, None),
     )

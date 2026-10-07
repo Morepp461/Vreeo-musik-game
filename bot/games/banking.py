@@ -13,6 +13,26 @@ def bank_embed(character_id):
     e.add_field(name="Pinjaman aktif",value="\n".join("#"+str(x["id"])+" • "+money(x["outstanding_principal"])+" • cicilan "+money(x["installment"]) for x in loans) if loans else "Tidak ada.",inline=False)
     return e
 
+
+def finance_embed(character_id):
+    row=supabase.table("game_personal_finance_snapshots").select("*").eq("character_id",character_id).order("created_at",desc=True).limit(1).execute().data
+    e=discord.Embed(title="📊 Keuangan Pribadi",description="Aset, liabilitas, pemasukan, pengeluaran, dan net worth.",color=discord.Color.gold())
+    if not row:
+        e.description="Belum ada snapshot keuangan. Engine akan membuatnya otomatis."
+        return e
+    x=row[0]
+    for key,label in [("income","Pemasukan"),("expenses","Pengeluaran"),("assets","Aset"),("liabilities","Liabilitas"),("net_worth","Net Worth")]:
+        e.add_field(name=label,value=money(x.get(key)),inline=True)
+    e.set_footer(text="Periode "+str(x.get("period_key","-")))
+    return e
+
+class FinanceButton(discord.ui.Button):
+    def __init__(self,c): super().__init__(label="Keuangan",emoji="📊",style=discord.ButtonStyle.secondary); self.c=c
+    async def callback(self,i):
+        c=get_character(i.user.id,i.guild.id)
+        if not c or c["id"]!=self.c: return await i.response.send_message("❌ Ini bukan dashboard karaktermu.",ephemeral=True)
+        await i.response.edit_message(embed=finance_embed(self.c),view=BankView(self.c))
+
 class BankOpenModal(discord.ui.Modal,title="🏦 Buka Rekening"):
     deposit=discord.ui.TextInput(label="Setoran awal",default="0",max_length=15)
     def __init__(self,c): super().__init__(); self.c=c
@@ -65,7 +85,7 @@ class BankView(discord.ui.View):
         super().__init__(timeout=300); self.c=c
         a=supabase.table("game_bank_accounts").select("id").eq("character_id",c).eq("status","active").limit(1).execute().data
         self.add_item(BankOpenButton(c) if not a else BankTransferButton(c))
-        self.add_item(BankLoanButton(c)); self.add_item(BankRepayButton(c)); self.add_item(BankBackButton(c))
+        self.add_item(BankLoanButton(c)); self.add_item(BankRepayButton(c)); self.add_item(FinanceButton(c)); self.add_item(BankBackButton(c))
 
 class BankOpenButton(discord.ui.Button):
     def __init__(self,c): super().__init__(label="Buka Rekening",emoji="🏦",style=discord.ButtonStyle.success); self.c=c

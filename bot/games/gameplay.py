@@ -158,7 +158,7 @@ class TravelView(discord.ui.View):
 class ShopView(discord.ui.View):
     def __init__(self,character_id):
         super().__init__(timeout=300); self.character_id=character_id
-        items=supabase.table("game_market").select("item_key,item_name,price,stock").eq("active",True).order("item_name").limit(25).execute().data or []
+        items=supabase.table("game_market").select("item_key,item_name,price,stock").order("item_name").limit(25).execute().data or []
         for item in items:
             label=str(item["item_name"])[:55]+" — "+money(item["price"])
             b=discord.ui.Button(label=label,style=discord.ButtonStyle.success)

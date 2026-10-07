@@ -2,6 +2,10 @@ import discord
 from ..database import supabase
 from .player import get_character, money, profile_embed
 
+def _authorized(i,character_id):
+    c=get_character(i.user.id,i.guild.id)
+    return bool(c and c["id"]==character_id)
+
 def bank_embed(character_id):
     a=supabase.table("game_bank_accounts").select("account_number,balance").eq("character_id",character_id).eq("status","active").limit(1).execute().data
     hist=supabase.table("game_credit_history").select("score_delta").eq("character_id",character_id).execute().data or []
@@ -89,16 +93,24 @@ class BankView(discord.ui.View):
 
 class BankOpenButton(discord.ui.Button):
     def __init__(self,c): super().__init__(label="Buka Rekening",emoji="🏦",style=discord.ButtonStyle.success); self.c=c
-    async def callback(self,i): await i.response.send_modal(BankOpenModal(self.c))
+    async def callback(self,i):
+        if not _authorized(i,self.c): return await i.response.send_message("❌ Ini bukan rekening karaktermu.",ephemeral=True)
+        await i.response.send_modal(BankOpenModal(self.c))
 class BankTransferButton(discord.ui.Button):
     def __init__(self,c): super().__init__(label="Transfer",emoji="💸",style=discord.ButtonStyle.primary); self.c=c
-    async def callback(self,i): await i.response.send_modal(BankTransferModal(self.c))
+    async def callback(self,i):
+        if not _authorized(i,self.c): return await i.response.send_message("❌ Ini bukan rekening karaktermu.",ephemeral=True)
+        await i.response.send_modal(BankTransferModal(self.c))
 class BankLoanButton(discord.ui.Button):
     def __init__(self,c): super().__init__(label="Pinjaman",emoji="💳",style=discord.ButtonStyle.primary); self.c=c
-    async def callback(self,i): await i.response.send_modal(BankLoanModal(self.c))
+    async def callback(self,i):
+        if not _authorized(i,self.c): return await i.response.send_message("❌ Ini bukan rekening karaktermu.",ephemeral=True)
+        await i.response.send_modal(BankLoanModal(self.c))
 class BankRepayButton(discord.ui.Button):
     def __init__(self,c): super().__init__(label="Bayar",emoji="💰",style=discord.ButtonStyle.success); self.c=c
-    async def callback(self,i): await i.response.send_modal(BankRepayModal(self.c))
+    async def callback(self,i):
+        if not _authorized(i,self.c): return await i.response.send_message("❌ Ini bukan rekening karaktermu.",ephemeral=True)
+        await i.response.send_modal(BankRepayModal(self.c))
 class BankBackButton(discord.ui.Button):
     def __init__(self,c): super().__init__(label="Kembali",emoji="↩️",style=discord.ButtonStyle.secondary); self.c=c
     async def callback(self,i):

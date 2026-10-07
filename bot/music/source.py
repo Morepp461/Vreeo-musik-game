@@ -513,8 +513,11 @@ async def search(query:str,limit:int=5):
         except Exception as exc:
             log.warning("Spotify search unavailable for %r: %s",query,exc)
 
-    # YouTube is the actual audio source. Try yt-dlp first, then fall back
-    # to YouTube's public search page when yt-dlp gets a bot/challenge response.
+    # YouTube search must stay metadata-only. Do NOT use the playback resolver
+    # here: _run_youtube_with_fallback() intentionally requests/probes playable
+    # audio formats, and some search results do not expose the selected format.
+    # That was causing "Requested format is not available" and made /search,
+    # !play, and autoplay fail before the actual playback resolver ran.
     opts={
         "quiet":True,
         "no_warnings":True,
@@ -524,9 +527,7 @@ async def search(query:str,limit:int=5):
         "extract_flat":True,
         "ignoreerrors":True,
         "extractor_args":{
-            "youtube":{
-                # Do not force a client; yt-dlp selects its supported defaults.
-            }
+            "youtube":{}
         },
     }
     opts["extractor_args"]["youtubepot-bgutilscript"]={"server_home":[POT_SCRIPT_HOME]}
@@ -535,7 +536,9 @@ async def search(query:str,limit:int=5):
 
     yt_results=[]
     try:
-        info=await _run_youtube_with_fallback(query,opts,20)
+        # Search only: resolve the selected URL later through resolve(), which
+        # owns the playback-specific client/format fallback logic.
+        info=await _run(f"ytsearch{limit}:{query}",opts,20)
         for item in info.get("entries") or []:
             if not item:
                 continue
@@ -557,11 +560,10 @@ async def search(query:str,limit:int=5):
     if not yt_results:
         try:
             yt_results=await asyncio.wait_for(_youtube_web_search(query,limit),timeout=15)
-        except Exception as exc:
+        except Exception:
             log.exception("YouTube web search failed for %r",query)
 
     results.extend(yt_results)
     if not results:
         raise ValueError("Tidak ada hasil untuk pencarian itu.")
     return results[:limit]
-

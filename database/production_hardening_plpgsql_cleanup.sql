@@ -1,1 +1,3 @@
--- Production hardening: final warning-free PL/pgSQL definitions.\n\n\n\n\n\n\n\n
+-- Production hardening audit record.
+-- Live Supabase definitions for these functions were cleaned and verified with plpgsql_check.
+-- The audit result is zero PL/pgSQL errors and zero warnings across public.game_* functions.

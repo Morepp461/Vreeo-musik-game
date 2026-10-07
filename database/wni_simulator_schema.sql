@@ -178,3 +178,11 @@ alter table game_ai_characters
   add column if not exists current_activity text not null default 'idle',
   add column if not exists last_activity_at timestamptz;
 create index if not exists game_ai_characters_autonomy_idx on game_ai_characters(alive,last_simulated_at);
+
+
+-- WNI SIMULATOR Batch 9: Economic Simulation Engine
+alter table game_world_state
+  add column if not exists economic_index numeric(6,3) not null default 1.000,
+  add column if not exists unemployment_rate numeric(6,4) not null default 0.0000,
+  add column if not exists average_npc_wallet bigint not null default 0,
+  add column if not exists last_economic_tick timestamptz;

@@ -26,6 +26,9 @@ class VreeoBot(commands.Bot):
 
     async def on_ready(self):
         logging.info("Logged in as %s (%s)",self.user,self.user.id if self.user else "unknown")
+        games = self.get_cog("Games")
+        if games:
+            await games.bootstrap()
 
     async def on_app_command_error(self,interaction,error):
         logging.error("Application command error: %s",error,exc_info=(type(error),error,error.__traceback__))

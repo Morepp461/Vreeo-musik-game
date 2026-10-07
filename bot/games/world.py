@@ -220,11 +220,13 @@ def seed_ai_population(target=120):
     return len(rows)
 
 def seed_world_state():
-    supabase.table("game_world_state").upsert({
+    existing = supabase.table("game_world_state").select("id").eq("id",1).limit(1).execute().data or []
+    if existing:
+        return
+    supabase.table("game_world_state").insert({
         "id": 1,
         "world_name": GAME_NAME,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }, on_conflict="id").execute()
+    }).execute()
 
 def create_bootstrap_event(ai_count: int):
     title = "WNI SIMULATOR resmi dimulai"

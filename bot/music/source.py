@@ -21,7 +21,6 @@ BASE={
     "format":"bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best",
     "skip_download":True,
     "extractor_args":{
-        "youtube":{"player_client":["mweb"]},
         "youtubepot-bgutilscript":{"server_home":[POT_SCRIPT_HOME]}
     },
 }
@@ -41,11 +40,17 @@ async def _run_youtube_with_fallback(query,opts,timeout=25):
     """Resolve with clients that currently produce playable YouTube CDN URLs."""
     # YouTube has recently returned valid-looking googlevideo URLs that FFmpeg
     # immediately rejects with 403. Try Android first, then public clients.
-    clients=(["mweb"],["web_safari"],["tv"],["android"])
+    # Let yt-dlp choose its current supported default clients. Forcing mweb
+    # is unsafe here: current YouTube GVS can return HTTP 403 even when the
+    # PO token was generated successfully.
+    clients=(None,)
     last=None
     for client_list in clients:
         attempt={**opts,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in opts.get("extractor_args",{}).items()}}
-        attempt["extractor_args"]["youtube"]={**attempt["extractor_args"].get("youtube",{}),"player_client":client_list}
+        if client_list is not None:
+            attempt["extractor_args"]["youtube"]={**attempt["extractor_args"].get("youtube",{}),"player_client":client_list}
+        else:
+            attempt["extractor_args"].get("youtube",{}).pop("player_client",None)
         try:
             info=await _run(query,attempt,timeout)
             if not info:
@@ -515,7 +520,7 @@ async def search(query:str,limit:int=5):
         "ignoreerrors":True,
         "extractor_args":{
             "youtube":{
-                "player_client":["mweb"]
+                # Do not force a client; yt-dlp selects its supported defaults.
             }
         },
     }

@@ -90,7 +90,33 @@ class CompanyView(discord.ui.View):
         c=get_character(i.user.id,i.guild.id)
         if not c or c['id']!=self.character_id:return await i.response.send_message('❌ Ini bukan dashboard karaktermu.',ephemeral=True)
         await i.response.edit_message(embed=discord.Embed(title='💼 Karier',description='Bangun kehidupan profesionalmu.',color=discord.Color.blurple()),view=CareerHubView(self.character_id))
-class CareerHubView(discord.ui.View):
+
+class QuestView(discord.ui.View):
+    def __init__(self,character_id):
+        super().__init__(timeout=300); self.character_id=character_id
+    async def render(self,interaction):
+        job=supabase.table("game_character_jobs").select("id").eq("character_id",self.character_id).eq("status","active").limit(1).execute().data or []
+        if not job:
+            return await interaction.response.edit_message(embed=discord.Embed(title="🎯 Quest Profesi",description="Belum memiliki pekerjaan aktif.",color=discord.Color.orange()),view=CareerHubView(self.character_id))
+        rows=supabase.table("game_job_quests").select("id,title,description,trigger_type").eq("character_job_id",job[0]["id"]).eq("status","open").order("assigned_at",desc=True).limit(5).execute().data or []
+        e=discord.Embed(title="🎯 Quest Profesi",description="Quest muncul dari kondisi nyata dunia/tempat kerja. Tidak ada pembayaran cash langsung.",color=discord.Color.blurple())
+        v=discord.ui.View(timeout=300)
+        for q in rows:
+            e.add_field(name=q["title"],value=q["description"],inline=False)
+            b=discord.ui.Button(label="Selesaikan",style=discord.ButtonStyle.success)
+            async def done(i,qid=q["id"],jid=job[0]["id"]):
+                try:
+                    r=supabase.rpc("game_complete_job_quest",{"p_character_job_id":jid,"p_quest_id":qid}).execute().data
+                    await i.response.edit_message(embed=discord.Embed(title="✅ Quest Selesai",description="Performa dan XP karier bertambah.",color=discord.Color.green()),view=self)
+                except Exception as ex: await i.response.send_message("❌ "+_err(ex),ephemeral=True)
+            b.callback=done; v.add_item(b)
+        if not rows: e.description="Belum ada quest aktif. Quest akan muncul ketika kondisi profesimu benar-benar terjadi di dunia."
+        await interaction.response.edit_message(embed=e,view=v if rows else self)
+    @discord.ui.button(label="🔄 Refresh",style=discord.ButtonStyle.secondary)
+    async def refresh(self,i,b): await self.render(i)
+    @discord.ui.button(label="↩️ Karier",style=discord.ButtonStyle.primary)
+    async def back(self,i,b): await i.response.edit_message(embed=discord.Embed(title="💼 Karier",description="Bangun kehidupan profesionalmu.",color=discord.Color.blurple()),view=CareerHubView(self.character_id))
+\nclass CareerHubView(discord.ui.View):
     def __init__(self,character_id):
         super().__init__(timeout=300);self.character_id=character_id
     @discord.ui.button(label="Lihat Lowongan",emoji="💼",style=discord.ButtonStyle.primary)
@@ -101,7 +127,7 @@ class CareerHubView(discord.ui.View):
         if not c or c['id']!=self.character_id:return await i.response.send_message('❌ Ini bukan dashboard karaktermu.',ephemeral=True)
         await i.response.edit_message(embed=discord.Embed(title='🏢 Perusahaan',description='Bangun perusahaan melalui alur polisi → wali kota → legalitas.',color=discord.Color.gold()),view=CompanyView(self.character_id))
 
-    @discord.ui.button(label="Status Kerja",emoji="📋",style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Quest Profesi",emoji="🎯",style=discord.ButtonStyle.primary,row=2)\n    async def quest(self,i,b):\n        c=get_character(i.user.id,i.guild.id)\n        if not c or c["id"]!=self.character_id:return await i.response.send_message("❌ Ini bukan dashboard karaktermu.",ephemeral=True)\n        await i.response.edit_message(embed=discord.Embed(title="🎯 Quest Profesi",description="Memuat kondisi dunia...",color=discord.Color.blurple()),view=QuestView(self.character_id))\n\n    @discord.ui.button(label="Status Kerja",emoji="📋",style=discord.ButtonStyle.success)
     async def status(self,i,b):
         try:
             rows=supabase.table("game_character_jobs").select("id,job_id,salary,skill,status,started_at,performance,position_level,career_xp,employer_institution_id,position_title").eq("character_id",self.character_id).eq("status","active").limit(1).execute().data or []

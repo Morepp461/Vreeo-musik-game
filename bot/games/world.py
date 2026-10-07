@@ -84,7 +84,9 @@ def _game_overwrites(guild: discord.Guild, roles, *, voice=False):
 
 async def ensure_game_roles(guild: discord.Guild):
     roles = []
-    for name, _ in ROLE_DEFINITIONS:
+    job_rows = supabase.table("game_jobs").select("job_name").eq("active",True).execute().data or []
+    definitions = ROLE_DEFINITIONS + [(f"WNI | Job | {j['job_name']}", "Profesi") for j in job_rows]
+    for name, _ in definitions:
         role = discord.utils.get(guild.roles, name=name)
         if role is None:
             role = await guild.create_role(name=name, reason="WNI SIMULATOR bootstrap")
@@ -152,6 +154,21 @@ async def ensure_game_channels(guild: discord.Guild, roles):
     _save_binding(guild.id, "channel", GENERAL_CHANNEL_KEY, text.id, text.name)
     _save_binding(guild.id, "channel", VOICE_CHANNEL_KEY, voice.id, voice.name)
     return text, voice
+
+async def reconcile_companies(guild: discord.Guild):
+    category = await _get_game_category(guild)
+    rows = supabase.table("game_businesses").select("id,business_key,name,discord_role_id,discord_channel_id").eq("status","active").eq("legal_status","legal").execute().data or []
+    for b in rows:
+        role = discord.utils.get(guild.roles, name=f"WNI | Company | {b['name']}")
+        if role is None:
+            role = await guild.create_role(name=f"WNI | Company | {b['name']}", reason="WNI company registration")
+        channel = guild.get_channel(int(b["discord_channel_id"])) if b.get("discord_channel_id") else None
+        if not isinstance(channel, discord.TextChannel):
+            channel = await guild.create_text_channel(f"company-{b['business_key'][:80]}", category=category, overwrites={guild.default_role: discord.PermissionOverwrite(view_channel=False), role: discord.PermissionOverwrite(view_channel=True, send_messages=True)}, reason="WNI company channel")
+        supabase.table("game_businesses").update({"discord_role_id":str(role.id),"discord_channel_id":str(channel.id)}).eq("id",b["id"]).execute()
+        _save_binding(guild.id,"role",f"company:{b['business_key']}",role.id,role.name)
+        _save_binding(guild.id,"channel",f"company:{b['business_key']}",channel.id,channel.name)
+    return len(rows)
 
 def seed_ai_population(target=120):
     existing = supabase.table("game_ai_characters").select("external_key", count="exact").execute()
@@ -228,6 +245,7 @@ async def bootstrap_guild(guild: discord.Guild):
     ai_added = seed_ai_population(120)
     roles = await ensure_game_roles(guild)
     text, voice = await ensure_game_channels(guild, roles)
+    companies_reconciled = await reconcile_companies(guild)
 
     existing_event = supabase.table("game_events").select("id").eq(
         "event_type", "world_bootstrap"
@@ -252,4 +270,5 @@ async def bootstrap_guild(guild: discord.Guild):
         "voice_channel_id": voice.id,
         "roles_created_or_verified": len(roles),
         "ai_added": ai_added,
+        "companies_reconciled": companies_reconciled,
     }

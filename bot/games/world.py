@@ -37,9 +37,8 @@ AI_LAST_NAMES = [
     "Ramadhan","Kusuma","Wibowo","Siregar","Setiawan","Maulana","Utami",
 ]
 AI_CITIES = [
-    "Jakarta","Surabaya","Bandung","Medan","Semarang","Makassar","Malang",
-    "Palembang","Denpasar","Yogyakarta","Balikpapan","Banjarmasin","Padang",
-    "Pekanbaru","Manado","Samarinda","Pontianak","Mataram","Solo","Bogor","Jayapura",
+    "Jakarta","Bandung","Semarang","Yogyakarta","Surabaya","Malang","Tangerang",
+    "Medan","Palembang","Pekanbaru","Denpasar","Balikpapan","Makassar","Jayapura",
 ]
 AI_JOBS = [
     "Karyawan swasta","Pedagang","Guru","Perawat","Polisi","Teknisi",

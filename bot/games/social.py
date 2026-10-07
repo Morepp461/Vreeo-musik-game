@@ -27,7 +27,17 @@ class WorldView(discord.ui.View):
             an=a[0]["name"] if a else "Unknown";bn=b2[0]["name"] if b2 else "Unknown"
             e.add_field(name=f"{an} ↔ {bn}",value=f"{r['relation_type']} • affinity {r['affinity']}",inline=False)
         await i.response.edit_message(embed=e,view=self)
-    @discord.ui.button(label="Aktivitas AI", emoji="🤖", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Memori NPC", emoji="🧠", style=discord.ButtonStyle.secondary, row=1)
+    async def memories(self,i,b):
+        from .memory import memory_embed
+        await i.response.edit_message(embed=memory_embed(),view=self)
+
+    @discord.ui.button(label="Reputasi NPC", emoji="⭐", style=discord.ButtonStyle.secondary, row=1)
+    async def reputation(self,i,b):
+        from .memory import reputation_embed
+        await i.response.edit_message(embed=reputation_embed(),view=self)
+
+    @discord.ui.button(label="Aktivitas AI", emoji="🤖", style=discord.ButtonStyle.secondary, row=2)
     async def ai_activity(self,i,b):
         rows=supabase.table("game_ai_life_events").select("event_type,description,city,occurred_at,character_id").order("occurred_at",desc=True).limit(8).execute().data or []
         e=discord.Embed(title="🤖 Kehidupan AI",description="Aktivitas terbaru masyarakat AI.",color=discord.Color.blurple())
@@ -39,7 +49,7 @@ class WorldView(discord.ui.View):
             e.add_field(name=f"{name} • {r['event_type']}",value=f"{r['description']}\n📍 {r.get('city') or 'Tidak diketahui'}",inline=False)
         await i.response.edit_message(embed=e,view=self)
 
-    @discord.ui.button(label="Kembali",emoji="↩️",style=discord.ButtonStyle.secondary,row=1)
+    @discord.ui.button(label="Kembali",emoji="↩️",style=discord.ButtonStyle.secondary,row=2)
     async def back(self,i,b):
         from .player import get_character,profile_embed
         from .commands import PlayerView

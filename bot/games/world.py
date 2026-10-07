@@ -163,7 +163,8 @@ def seed_ai_population(target=120):
     used = set()
     for i in range(current, target):
         while True:
-            gender = random.choice(["Laki-laki","Perempuan"])\n            if gender == "Laki-laki":
+            gender = random.choice(["Laki-laki","Perempuan"])
+            if gender == "Laki-laki":
                 first_pool = ["Agus","Budi","Eko","Fajar","Gilang","Indra","Joko","Raka","Teguh"]
                 last_pool = ["Pratama","Wijaya","Saputra","Santoso","Hidayat","Nugroho","Wibowo","Setiawan"]
             else:

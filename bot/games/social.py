@@ -2,11 +2,11 @@ import discord
 from ..database import supabase
 
 def news_embed():
-    rows=supabase.table("game_news").select("title,body,category,severity,city,published_at").order("published_at",desc=True).limit(8).execute().data or []
+    rows=supabase.table("game_news").select("title,body,category,published_at").order("published_at",desc=True).limit(8).execute().data or []
     e=discord.Embed(title="📰 Berita Indonesia",description="Peristiwa dunia simulasi terbaru.",color=discord.Color.dark_red())
     if not rows:e.description="Belum ada berita baru."
     for n in rows:
-        loc=f" • {n['city']}" if n.get("city") else ""
+        loc=""
         e.add_field(name=f"{n['title']} — {n['category'].upper()}{loc}",value=n["body"][:900],inline=False)
     return e
 

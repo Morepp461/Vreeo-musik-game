@@ -26,7 +26,7 @@ class JobView(discord.ui.View):
                 await interaction.response.edit_message(embed=discord.Embed(title="✅ Diterima Kerja",description=f"Kamu sekarang bekerja sebagai **{row['job_name']}**.\nGaji dasar: **Rp{row['salary']:,}**",color=discord.Color.green()),view=None)
             except Exception as exc:
                 s=str(exc)
-                msg="Kamu sudah memiliki pekerjaan aktif." if "ALREADY_EMPLOYED" in s else "Pekerjaan tidak tersedia." if "JOB_NOT_FOUND" in s else "Aksi gagal."
+                msg=("Kamu sudah memiliki pekerjaan aktif." if "ALREADY_EMPLOYED" in s else "Pekerjaan tidak tersedia." if "JOB_NOT_FOUND" in s else "Skill belum cukup." if "SKILL_TOO_LOW" in s else "Karakter tidak ditemukan." if "CHARACTER_NOT_FOUND" in s else "Karakter tidak aktif." if "CHARACTER_NOT_ACTIVE" in s else f"Error sistem: {s[:180]}")
                 await interaction.response.send_message("❌ "+msg,ephemeral=True)
         return cb
 

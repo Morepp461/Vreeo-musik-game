@@ -95,6 +95,49 @@ class ActionHubView(discord.ui.View):
             return await interaction.response.send_message("❌ Ini bukan dashboard karaktermu.", ephemeral=True)
         await interaction.response.edit_message(embed=profile_embed(c), view=PlayerView(c))
 
+class GodModeView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=300)
+        self.bot = bot
+
+    async def _render(self, interaction):
+        state = supabase.table("game_world_state").select("*").eq("id", 1).limit(1).execute()
+        row = state.data[0] if state.data else {}
+        e = discord.Embed(title="👑 WNI SIMULATOR — GOD MODE", description="Kontrol dunia + reconciliation + audit.", color=discord.Color.gold())
+        e.add_field(name="World Speed", value=f"{row.get('real_seconds_per_game_day',604800)} detik/game-day", inline=True)
+        e.add_field(name="AI Target", value=str(row.get("ai_population_target",250)), inline=True)
+        e.add_field(name="Economy", value=str(row.get("economy_multiplier",1)), inline=True)
+        e.add_field(name="Inflasi", value=str(row.get("inflation_rate",0)), inline=True)
+        e.add_field(name="Simulasi", value="⏸️ PAUSED" if row.get("paused") else "▶️ RUNNING", inline=True)
+        e.set_footer(text="Semua aksi God Mode dicatat ke audit log.")
+        await interaction.response.edit_message(embed=e, view=self)
+
+    @discord.ui.button(label="Refresh", emoji="🔄", style=discord.ButtonStyle.secondary)
+    async def refresh(self, interaction, button):
+        await self._render(interaction)
+
+    @discord.ui.button(label="Pause/Resume", emoji="⏯️", style=discord.ButtonStyle.primary)
+    async def toggle(self, interaction, button):
+        state = supabase.table("game_world_state").select("paused").eq("id",1).limit(1).execute().data
+        paused = bool(state[0].get("paused")) if state else False
+        supabase.rpc("game_set_world_paused", {"p_paused": not paused, "p_actor_id": str(interaction.user.id)}).execute()
+        await self._render(interaction)
+
+    @discord.ui.button(label="Reconcile", emoji="🛠️", style=discord.ButtonStyle.success)
+    async def reconcile(self, interaction, button):
+        from .world import bootstrap_guild
+        result = await bootstrap_guild(interaction.guild)
+        supabase.table("game_audit_log").insert({
+            "actor_type":"godmode",
+            "actor_id":str(interaction.user.id),
+            "action":"discord_reconcile",
+            "target_type":"guild",
+            "target_id":str(interaction.guild.id),
+            "metadata":result or {},
+        }).execute()
+        await interaction.response.send_message("✅ Rekonsiliasi Discord selesai. Role + channel WNI diverifikasi tanpa membuat kategori baru.", ephemeral=True)
+
+
 class Games(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -141,7 +184,7 @@ class Games(commands.Cog):
         e.add_field(name="Inflasi", value=str(row.get("inflation_rate",0)), inline=True)
         e.add_field(name="Simulasi", value="PAUSED" if row.get("paused") else "RUNNING", inline=True)
         e.set_footer(text="God Mode dikunci ke pemilik bot.")
-        await interaction.response.send_message(embed=e, ephemeral=True)
+        await interaction.response.send_message(embed=e, view=GodModeView(self.bot), ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Games(bot))

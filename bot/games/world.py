@@ -222,8 +222,10 @@ async def bootstrap_guild(guild: discord.Guild):
     roles = await ensure_game_roles(guild)
     text, voice = await ensure_game_channels(guild, roles)
 
-    binding = _binding(guild.id, "system", "bootstrap-bulletin")
-    if binding is None:
+    existing_event = supabase.table("game_events").select("id").eq(
+        "event_type", "world_bootstrap"
+    ).limit(1).execute()
+    if not existing_event.data:
         _, description = create_bootstrap_event(120)
         embed = discord.Embed(
             title=f"🇮🇩 {GAME_NAME}",
@@ -235,7 +237,6 @@ async def bootstrap_guild(guild: discord.Guild):
         embed.add_field(name="📡 Kanal global", value="#wni-general + 🔊 wni-ngobrol", inline=True)
         embed.set_footer(text="Database adalah sumber kebenaran dunia.")
         await text.send(embed=embed)
-        _save_binding(guild.id, "system", "bootstrap-bulletin", text.id, "bootstrap-bulletin")
 
     return {
         "guild_id": guild.id,

@@ -16,9 +16,9 @@ class Economy(commands.Cog):
         key=datetime.now(timezone.utc).strftime("%Y-%m-%d-%H")
         try:
             world=supabase.rpc("game_world_tick",{"p_tick_key":key}).execute().data
-            ai=supabase.rpc("game_ai_life_tick",{"p_tick_key":key+"-ai"}).execute().data
+            ai=supabase.rpc("game_ai_autonomous_tick",{"p_tick_key":key+"-ai","p_limit":25}).execute().data
             r=supabase.rpc("game_run_economy_tick",{"p_tick_key":key}).execute().data
-            log.info("WNI world tick: %s | AI life: %s | economy: %s",world,ai,r)
+            log.info("WNI world tick: %s | autonomous AI: %s | economy: %s",world,ai,r)
         except Exception:
             log.exception("WNI economy tick gagal")
     @tick.before_loop

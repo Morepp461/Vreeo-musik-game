@@ -12,7 +12,7 @@ import yt_dlp
 from .queue import Track
 from ..config import SPOTIFY_CLIENT_ID,SPOTIFY_CLIENT_SECRET
 
-POT_PROVIDER_URL=os.getenv("YTDL_POT_PROVIDER_URL","").rstrip("/")
+POT_PROVIDER_URL=os.getenv("YTDL_POT_PROVIDER_URL","http://127.0.0.1:4416").rstrip("/")
 POT_SCRIPT_HOME=os.getenv("YTDL_POT_SCRIPT_HOME","/opt/bgutil-ytdlp-pot-provider/server")
 BASE={
     "quiet":True,
@@ -21,7 +21,7 @@ BASE={
     "format":"bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best",
     "skip_download":True,
     "extractor_args":{
-        "youtube":{"player_client":["web_embedded"]},
+        "youtube":{"player_client":["mweb"]},
         "youtubepot-bgutilscript":{"server_home":[POT_SCRIPT_HOME]}
     },
 }

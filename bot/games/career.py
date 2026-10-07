@@ -17,6 +17,9 @@ def _err(exc):
         "BUSINESS_INSUFFICIENT_CASH":"Kas bisnis tidak cukup.",
         "ALREADY_EMPLOYEE":"Karakter tersebut sudah bekerja di bisnis ini.",
         "EMPLOYEE_NOT_FOUND":"Karyawan tidak ditemukan.",
+        "WORKPLACE_UNAVAILABLE":"Belum ada tempat kerja yang sesuai di kotamu.",
+        "QUEST_NOT_FOUND":"Quest sudah tidak tersedia.",
+        "JOB_NOT_ACTIVE":"Pekerjaan sudah tidak aktif.",
     }
     for k,v in m.items():
         if k in s:return v
@@ -101,7 +104,7 @@ class CareerHubView(discord.ui.View):
     @discord.ui.button(label="Status Kerja",emoji="📋",style=discord.ButtonStyle.success)
     async def status(self,i,b):
         try:
-            rows=supabase.table("game_character_jobs").select("id,job_id,salary,skill,status,started_at").eq("character_id",self.character_id).eq("status","active").limit(1).execute().data or []
+            rows=supabase.table("game_character_jobs").select("id,job_id,salary,skill,status,started_at,performance,position_level,career_xp,employer_institution_id,position_title").eq("character_id",self.character_id).eq("status","active").limit(1).execute().data or []
             if not rows:return await i.response.edit_message(embed=discord.Embed(title="📋 Status Kerja",description="Belum punya pekerjaan aktif.",color=discord.Color.orange()),view=self)
             j=supabase.table("game_jobs").select("job_name,sector").eq("id",rows[0]["job_id"]).limit(1).execute().data
             x=rows[0]
@@ -110,6 +113,11 @@ class CareerHubView(discord.ui.View):
             e.add_field(name="Gaji",value=f"Rp{x['salary']:,}",inline=True)
             e.add_field(name="Skill",value=f"{x['skill']}/100",inline=True)
             e.add_field(name="Mulai",value=str(x["started_at"])[:10],inline=True)
+            e.add_field(name="Performa",value=f"{x.get('performance',50)}/100",inline=True)
+            e.add_field(name="Level Karier",value=str(x.get("position_level",1)),inline=True)
+            e.add_field(name="XP Karier",value=str(x.get("career_xp",0)),inline=True)
+            inst=supabase.table("game_institutions").select("name,institution_type").eq("id",x.get("employer_institution_id")).limit(1).execute().data if x.get("employer_institution_id") else []
+            if inst: e.add_field(name="Tempat Kerja",value=f"{inst[0]['name']} ({inst[0]['institution_type']})",inline=False)
             await i.response.edit_message(embed=e,view=CareerHubView(self.character_id))
         except Exception as e:await i.response.send_message("❌ "+_err(e),ephemeral=True)
     @discord.ui.button(label="Pemerintahan Kota",emoji="🏛️",style=discord.ButtonStyle.secondary,row=1)

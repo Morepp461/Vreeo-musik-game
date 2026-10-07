@@ -46,7 +46,6 @@ async def _run_youtube_with_fallback(query,opts,timeout=25):
     attempts=(
         (["android_vr"], "bestaudio/best"),
         (["android"], "bestaudio/best"),
-        (["web_safari"], "bestaudio/best"),
         (None, None),
     )
     last=None

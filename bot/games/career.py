@@ -43,7 +43,12 @@ class JobView(discord.ui.View):
             try:
                 d=supabase.rpc("game_apply_for_job",{"p_character_id":self.character_id,"p_job_key":key}).execute().data
                 r=d[0] if isinstance(d,list) else d
-                await i.response.edit_message(embed=discord.Embed(title="✅ Diterima Kerja",description=f"Kamu sekarang bekerja sebagai **{r['job_name']}**.\nGaji: **Rp{r['salary']:,}**",color=discord.Color.green()),view=CareerHubView(self.character_id))
+                role = discord.utils.get(i.guild.roles, name=f"WNI | Job | {r['job_name']}")
+                if role is None:
+                    role = await i.guild.create_role(name=f"WNI | Job | {r['job_name']}", reason="WNI job assignment")
+                if role not in i.user.roles:
+                    await i.user.add_roles(role, reason="WNI job assignment")
+                await i.response.edit_message(embed=discord.Embed(title="✅ Diterima Kerja",description=f"Kamu sekarang bekerja sebagai **{r['job_name']}**.\\nGaji: **Rp{r['salary']:,}**\\n🏢 Tempat kerja: **{r.get('workplace_name','Ditentukan engine')}**",color=discord.Color.green()),view=CareerHubView(self.character_id))
             except Exception as e: await i.response.send_message("❌ "+_err(e),ephemeral=True)
         return cb
 
@@ -72,6 +77,12 @@ class CareerHubView(discord.ui.View):
         if not c or c["id"]!=self.character_id:return await i.response.send_message("❌ Ini bukan karaktermu.",ephemeral=True)
         try:
             supabase.rpc("game_resign_job",{"p_character_id":self.character_id}).execute()
+            role_names=[r.name for r in i.user.roles if r.name.startswith("WNI | Job | ")]
+            for role_name in role_names:
+                role=discord.utils.get(i.guild.roles,name=role_name)
+                if role:
+                    try: await i.user.remove_roles(role, reason="WNI job resignation")
+                    except Exception: pass
             await i.response.edit_message(embed=discord.Embed(title="📤 Resign Berhasil",description="Pekerjaan aktifmu telah diakhiri.",color=discord.Color.orange()),view=self)
         except Exception as e:await i.response.send_message("❌ "+_err(e),ephemeral=True)
     @discord.ui.button(label="Kembali",emoji="↩️",style=discord.ButtonStyle.secondary)

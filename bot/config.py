@@ -13,3 +13,6 @@ SPOTIFY_CLIENT_ID=os.getenv("SPOTIFY_CLIENT_ID","")
 SPOTIFY_CLIENT_SECRET=os.getenv("SPOTIFY_CLIENT_SECRET","")
 MAX_QUEUE_SIZE=int(os.getenv("MAX_QUEUE_SIZE","100"))
 MAX_PLAYLIST_SIZE=int(os.getenv("MAX_PLAYLIST_SIZE","100"))
+
+# WNI SIMULATOR: game-generated channels may ONLY use this existing category.
+GAME_CATEGORY_ID=int(os.getenv("GAME_CATEGORY_ID","1557086687920656444"))

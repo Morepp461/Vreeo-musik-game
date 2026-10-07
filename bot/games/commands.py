@@ -5,6 +5,7 @@ from discord import app_commands
 from .world import bootstrap_guild, GAME_NAME
 from .player import get_character, get_wallet, get_needs, get_inventory, get_assets, profile_embed, inventory_text, assets_text, RegisterView, money
 from ..database import supabase
+from .gameplay import ActionView, TravelView, ShopView, action_embed
 
 GODMODE_OWNER_ID = 1441030290280550513
 
@@ -40,13 +41,46 @@ class PlayerView(discord.ui.View):
         e = discord.Embed(title="🏠 Aset Milikmu", description=assets_text(self.character_id), color=discord.Color.gold())
         await interaction.response.edit_message(embed=e, view=self)
 
-    @discord.ui.button(label="Kebutuhan", emoji="❤️", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Kebutuhan", emoji="❤️", style=discord.ButtonStyle.danger, row=1)
     async def needs(self, interaction, button):
         n = get_needs(self.character_id) or {}
         e = discord.Embed(title="❤️ Kondisi Karakter", color=discord.Color.red())
         for key,label,emoji in [("health","Kesehatan","❤️"),("hunger","Lapar","🍚"),("thirst","Haus","💧"),("energy","Energi","⚡"),("happiness","Kebahagiaan","😊"),("stress","Stres","😵")]:
             e.add_field(name=f"{emoji} {label}", value=f"{n.get(key,0)}/100", inline=True)
         await interaction.response.edit_message(embed=e, view=self)
+
+    @discord.ui.button(label="Kehidupan", emoji="🎮", style=discord.ButtonStyle.primary, row=1)
+    async def life(self, interaction, button):
+        c = supabase.table("game_characters").select("*").eq("id", self.character_id).limit(1).execute().data
+        if not c:
+            return await interaction.response.send_message("❌ Karakter tidak ditemukan.", ephemeral=True)
+        await interaction.response.edit_message(embed=action_embed(c[0]), view=ActionHubView(self.character_id))
+
+class ActionHubView(discord.ui.View):
+    def __init__(self, character_id):
+        super().__init__(timeout=300)
+        self.character_id = character_id
+
+    @discord.ui.button(label="Aktivitas", emoji="⚡", style=discord.ButtonStyle.success)
+    async def activities(self, interaction, button):
+        await interaction.response.edit_message(embed=action_embed({"id": self.character_id}), view=ActionView(self.character_id))
+
+    @discord.ui.button(label="Toko", emoji="🛍️", style=discord.ButtonStyle.success)
+    async def shop(self, interaction, button):
+        e = discord.Embed(title="🛍️ Toko", description="Pilih barang yang ingin dibeli. Pembelian dicatat ke wallet + ledger + inventaris.", color=discord.Color.green())
+        await interaction.response.edit_message(embed=e, view=ShopView(self.character_id))
+
+    @discord.ui.button(label="Perjalanan", emoji="🚆", style=discord.ButtonStyle.secondary)
+    async def travel(self, interaction, button):
+        e = discord.Embed(title="🚆 Perjalanan", description="Pilih kota tujuan. Biaya perjalanan Rp75.000.", color=discord.Color.blurple())
+        await interaction.response.edit_message(embed=e, view=TravelView(self.character_id))
+
+    @discord.ui.button(label="Kembali", emoji="↩️", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction, button):
+        c = get_character(interaction.user.id, interaction.guild.id)
+        if not c or c["id"] != self.character_id:
+            return await interaction.response.send_message("❌ Ini bukan dashboard karaktermu.", ephemeral=True)
+        await interaction.response.edit_message(embed=profile_embed(c), view=PlayerView(c))
 
 class Games(commands.Cog):
     def __init__(self, bot):

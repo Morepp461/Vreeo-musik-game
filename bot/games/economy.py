@@ -20,6 +20,7 @@ class Economy(commands.Cog):
             ai=supabase.rpc("game_ai_autonomous_tick",{"p_tick_key":key+"-ai","p_limit":25}).execute().data
             law=supabase.rpc("game_run_law_tick",{"p_tick_key":key+"-law"}).execute().data
             government=supabase.rpc("game_run_government_tick",{"p_tick_key":key+"-government"}).execute().data
+            city_government=supabase.rpc("game_run_city_government_tick",{"p_tick_key":key+"-citygov"}).execute().data
             city=supabase.rpc("game_run_city_simulation",{"p_tick_key":key+"-city"}).execute().data
             world_state=supabase.table("game_world_state").select("world_time").eq("id",1).limit(1).execute().data
             game_time=(world_state[0]["world_time"] if world_state else datetime.now(timezone.utc).isoformat())
@@ -30,7 +31,7 @@ class Economy(commands.Cog):
                 try: await reconcile_companies(guild)
                 except Exception: log.exception("WNI company reconciliation gagal untuk guild %s",guild.id)
             r=supabase.rpc("game_run_economy_tick",{"p_tick_key":key}).execute().data
-            log.info("WNI world tick: %s | autonomous AI: %s | law: %s | government: %s | city: %s | payroll: %s | business finance: %s | economy: %s",world,ai,law,government,city,payroll,business_payroll,r)
+            log.info("WNI world tick: %s | autonomous AI: %s | law: %s | government: %s | city government: %s | city: %s | payroll: %s | business finance: %s | economy: %s",world,ai,law,government,city_government,city,payroll,business_payroll,r)
         except Exception:
             log.exception("WNI economy tick gagal")
     @tick.before_loop

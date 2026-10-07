@@ -6,7 +6,8 @@ from .world import bootstrap_guild, GAME_NAME
 from .player import get_character, get_wallet, get_needs, get_inventory, get_assets, profile_embed, inventory_text, assets_text, RegisterView, money
 from ..database import supabase
 from .gameplay import ActionView, TravelView, ShopView, action_embed
-from .career import CareerHubView\nfrom .social import WorldView
+from .career import CareerHubView
+from .social import WorldView
 
 GODMODE_OWNER_ID = 1441030290280550513
 
@@ -57,7 +58,11 @@ class PlayerView(discord.ui.View):
             return await interaction.response.send_message("❌ Ini bukan dashboard karaktermu.", ephemeral=True)
         await interaction.response.edit_message(embed=discord.Embed(title="💼 Karier",description="Bangun kehidupan profesionalmu. Cari kerja dan mulai dari bawah.",color=discord.Color.blurple()),view=CareerHubView(self.character_id))
 
-    @discord.ui.button(label="Dunia", emoji="🌏", style=discord.ButtonStyle.primary, row=2)\n    async def world(self, interaction, button):\n        await interaction.response.edit_message(embed=discord.Embed(title="🌏 Dunia WNI SIMULATOR",description="Berita, hubungan AI, kriminal, bencana, dan perkembangan masyarakat.",color=discord.Color.dark_red()),view=WorldView(self.character_id))\n\n    @discord.ui.button(label="Kehidupan", emoji="🎮", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="Dunia", emoji="🌏", style=discord.ButtonStyle.primary, row=2)
+    async def world(self, interaction, button):
+        await interaction.response.edit_message(embed=discord.Embed(title="🌏 Dunia WNI SIMULATOR",description="Berita, hubungan AI, kriminal, bencana, dan perkembangan masyarakat.",color=discord.Color.dark_red()),view=WorldView(self.character_id))
+
+    @discord.ui.button(label="Kehidupan", emoji="🎮", style=discord.ButtonStyle.primary, row=1)
     async def life(self, interaction, button):
         c = supabase.table("game_characters").select("*").eq("id", self.character_id).limit(1).execute().data
         if not c:

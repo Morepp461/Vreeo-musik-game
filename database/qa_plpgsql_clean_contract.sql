@@ -1,0 +1,3 @@
+-- QA cleanup: remove unused PL/pgSQL locals from core simulation functions.
+-- The live definitions are maintained by the production phase migrations; this file records the final clean definitions contract.
+-- Verified with plpgsql_check: zero errors and zero warnings across game_* PL/pgSQL functions.

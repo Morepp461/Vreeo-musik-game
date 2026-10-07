@@ -43,12 +43,17 @@ async def _run_youtube_with_fallback(query,opts,timeout=25):
     # Let yt-dlp choose its current supported default clients. Forcing mweb
     # is unsafe here: current YouTube GVS can return HTTP 403 even when the
     # PO token was generated successfully.
-    clients=(None,)
+    attempts=(
+        (["web_safari"], "bestaudio[protocol^=m3u8]/bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best"),
+        (None, None),
+    )
     last=None
-    for client_list in clients:
+    for client_list,format_selector in attempts:
         attempt={**opts,"extractor_args":{k:dict(v) if isinstance(v,dict) else v for k,v in opts.get("extractor_args",{}).items()}}
         if client_list is not None:
             attempt["extractor_args"]["youtube"]={**attempt["extractor_args"].get("youtube",{}),"player_client":client_list}
+            if format_selector:
+                attempt["format"]=format_selector
         else:
             attempt["extractor_args"].get("youtube",{}).pop("player_client",None)
         try:

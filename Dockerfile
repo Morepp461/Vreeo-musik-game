@@ -5,7 +5,8 @@ RUN apt-get update \
     && curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/usr/local/bin:${PATH}"
+ENV PATH="/usr/local/bin:${PATH}" \
+    YTDL_POT_PROVIDER_URL="http://127.0.0.1:4416"
 
 WORKDIR /app
 COPY requirements.txt .

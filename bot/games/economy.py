@@ -25,11 +25,11 @@ class Economy(commands.Cog):
             health=supabase.rpc("game_run_health_tick",{"p_tick_key":key+"-health"}).execute().data
             quests=supabase.rpc("game_run_job_quest_tick",{"p_tick_key":key+"-career"}).execute().data
             relationships=supabase.rpc("game_update_player_relationship_distance").execute().data
-            city_economy=supabase.rpc("game_run_city_economy_tick",{"p_period_key":str(game_time)[:7]}).execute().data
-            personal_finance=supabase.rpc("game_snapshot_personal_finance",{"p_period_key":str(game_time)[:7]}).execute().data
             world_state=supabase.table("game_world_state").select("world_time").eq("id",1).limit(1).execute().data
             game_time=(world_state[0]["world_time"] if world_state else datetime.now(timezone.utc).isoformat())
             period_key=str(game_time)[:7]
+            city_economy=supabase.rpc("game_run_city_economy_tick",{"p_period_key":period_key}).execute().data
+            personal_finance=supabase.rpc("game_snapshot_personal_finance",{"p_period_key":period_key}).execute().data
             payroll=supabase.rpc("game_payroll_period",{"p_period_key":period_key}).execute().data
             business_payroll=supabase.rpc("game_close_business_finance",{"p_period_key":period_key}).execute().data
             for guild in self.bot.guilds:

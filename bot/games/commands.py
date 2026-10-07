@@ -123,6 +123,24 @@ class GodModeView(discord.ui.View):
         supabase.rpc("game_set_world_paused", {"p_paused": not paused, "p_actor_id": str(interaction.user.id)}).execute()
         await self._render(interaction)
 
+    @discord.ui.button(label="Event", emoji="🌪️", style=discord.ButtonStyle.danger, row=1)
+    async def event(self, interaction, button):
+        if interaction.user.id != GODMODE_OWNER_ID:
+            return await interaction.response.send_message("God Mode denied.", ephemeral=True)
+        await interaction.response.send_modal(GodEventModal())
+
+    @discord.ui.button(label="World Edit", emoji="🌍", style=discord.ButtonStyle.primary, row=1)
+    async def world_edit(self, interaction, button):
+        if interaction.user.id != GODMODE_OWNER_ID:
+            return await interaction.response.send_message("God Mode denied.", ephemeral=True)
+        await interaction.response.send_modal(GodWorldModal())
+
+    @discord.ui.button(label="Giveaway", emoji="🎁", style=discord.ButtonStyle.success, row=1)
+    async def giveaway(self, interaction, button):
+        if interaction.user.id != GODMODE_OWNER_ID:
+            return await interaction.response.send_message("God Mode denied.", ephemeral=True)
+        await interaction.response.send_modal(GodGiveawayModal())
+
     @discord.ui.button(label="Reconcile", emoji="🛠️", style=discord.ButtonStyle.success)
     async def reconcile(self, interaction, button):
         from .world import bootstrap_guild
@@ -137,6 +155,50 @@ class GodModeView(discord.ui.View):
         }).execute()
         await interaction.response.send_message("✅ Rekonsiliasi Discord selesai. Role + channel WNI diverifikasi tanpa membuat kategori baru.", ephemeral=True)
 
+
+
+class GodEventModal(discord.ui.Modal, title="God Mode — Create Event"):
+    event_type = discord.ui.TextInput(label="Event type", placeholder="flood / festival / crisis / boom", max_length=40)
+    title = discord.ui.TextInput(label="Judul", max_length=120)
+    city = discord.ui.TextInput(label="Kota", max_length=80)
+    severity = discord.ui.TextInput(label="Severity 1-10", default="5", max_length=2)
+    description = discord.ui.TextInput(label="Deskripsi", style=discord.TextStyle.paragraph, max_length=800)
+    async def on_submit(self, interaction):
+        try:
+            severity = max(1, min(10, int(str(self.severity.value))))
+            result = supabase.rpc("game_god_create_event", {"p_actor":str(interaction.user.id),"p_event_type":str(self.event_type.value),"p_title":str(self.title.value),"p_description":str(self.description.value),"p_city":str(self.city.value),"p_severity":severity,"p_effects":{}}).execute().data
+            await interaction.response.send_message("Event God Mode dibuat. ID: " + str(result), ephemeral=True)
+        except Exception as exc:
+            await interaction.response.send_message("Gagal membuat event: " + str(exc), ephemeral=True)
+
+class GodWorldModal(discord.ui.Modal, title="God Mode — World State"):
+    city = discord.ui.TextInput(label="City focus (opsional)", required=False, max_length=80)
+    economy = discord.ui.TextInput(label="Economy multiplier (opsional)", required=False, max_length=20)
+    inflation = discord.ui.TextInput(label="Inflation rate (opsional)", required=False, max_length=20)
+    ai_target = discord.ui.TextInput(label="AI target (opsional)", required=False, max_length=8)
+    async def on_submit(self, interaction):
+        try:
+            changes = {}
+            if str(self.city.value).strip(): changes["current_city_focus"] = str(self.city.value).strip()
+            if str(self.economy.value).strip(): changes["economy_multiplier"] = float(str(self.economy.value))
+            if str(self.inflation.value).strip(): changes["inflation_rate"] = float(str(self.inflation.value))
+            if str(self.ai_target.value).strip(): changes["ai_population_target"] = int(str(self.ai_target.value))
+            supabase.rpc("game_god_edit_world_state", {"p_actor":str(interaction.user.id),"p_changes":changes}).execute()
+            await interaction.response.send_message("World state diperbarui dan dicatat ke audit log.", ephemeral=True)
+        except Exception as exc:
+            await interaction.response.send_message("Gagal mengubah world state: " + str(exc), ephemeral=True)
+
+class GodGiveawayModal(discord.ui.Modal, title="God Mode — Giveaway"):
+    character_id = discord.ui.TextInput(label="Character ID", max_length=20)
+    item_key = discord.ui.TextInput(label="Item key", max_length=80)
+    quantity = discord.ui.TextInput(label="Quantity", default="1", max_length=12)
+    event_id = discord.ui.TextInput(label="Event ID", max_length=20)
+    async def on_submit(self, interaction):
+        try:
+            result = supabase.rpc("game_god_create_giveaway", {"p_actor":str(interaction.user.id),"p_event_id":int(str(self.event_id.value)),"p_item_key":str(self.item_key.value),"p_quantity":int(str(self.quantity.value)),"p_recipient_character_id":int(str(self.character_id.value))}).execute().data
+            await interaction.response.send_message("Giveaway dikirim. ID: " + str(result), ephemeral=True)
+        except Exception as exc:
+            await interaction.response.send_message("Gagal giveaway: " + str(exc), ephemeral=True)
 
 class Games(commands.Cog):
     def __init__(self, bot):

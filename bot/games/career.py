@@ -1,6 +1,6 @@
 import discord
 from ..database import supabase
-from .player import get_character, money
+from .player import get_character, money, CITIES
 
 def _err(exc):
     s=str(exc)
@@ -52,11 +52,52 @@ class JobView(discord.ui.View):
             except Exception as e: await i.response.send_message("❌ "+_err(e),ephemeral=True)
         return cb
 
+
+class CompanyModal(discord.ui.Modal, title='🏢 Daftar Perusahaan'):
+    name=discord.ui.TextInput(label='Nama perusahaan',max_length=60)
+    sector=discord.ui.TextInput(label='Bidang usaha',placeholder='Contoh: Restoran, Teknologi, Konstruksi',max_length=40)
+    city=discord.ui.TextInput(label='Kota',placeholder='Contoh: Malang',max_length=30)
+    capital=discord.ui.TextInput(label='Modal awal',placeholder='Minimal Rp1.000.000',max_length=15)
+    async def on_submit(self,interaction):
+        c=get_character(interaction.user.id,interaction.guild.id)
+        if not c:return await interaction.response.send_message('❌ Kamu belum memiliki karakter.',ephemeral=True)
+        city=self.city.value.strip()
+        if city.lower() not in {x[1].lower() for x in CITIES}:return await interaction.response.send_message('❌ Kota belum tersedia di dunia.',ephemeral=True)
+        try:
+            capital=int(self.capital.value.replace('.','').replace(',','').replace('Rp','').strip())
+            key='company-%s-%s-%s'%(interaction.guild.id,interaction.user.id,abs(hash(self.name.value.strip().lower()))%100000000)
+            d=supabase.rpc('game_register_company',{'p_owner_character_id':c['id'],'p_application_key':key,'p_name':self.name.value.strip(),'p_sector':self.sector.value.strip(),'p_city_key':city.lower().replace(' ','-'),'p_capital':capital}).execute().data
+            await interaction.response.send_message('🏢 Pendaftaran perusahaan diterima.\nNama: **%s**\nKota: **%s**\nModal: **Rp%s**\n\n📋 Menunggu pemeriksaan polisi → persetujuan wali kota.'%(self.name.value.strip(),city,f'{capital:,}'),ephemeral=True)
+        except Exception as e:await interaction.response.send_message('❌ '+_err(e),ephemeral=True)
+
+class CompanyView(discord.ui.View):
+    def __init__(self,character_id):super().__init__(timeout=300);self.character_id=character_id
+    @discord.ui.button(label='Daftar Perusahaan',emoji='🏢',style=discord.ButtonStyle.success)
+    async def register(self,i,b):
+        c=get_character(i.user.id,i.guild.id)
+        if not c or c['id']!=self.character_id:return await i.response.send_message('❌ Ini bukan karaktermu.',ephemeral=True)
+        await i.response.send_modal(CompanyModal())
+    @discord.ui.button(label='Status Pengajuan',emoji='📋',style=discord.ButtonStyle.primary)
+    async def status(self,i,b):
+        rows=supabase.table('game_company_applications').select('company_name,police_status,mayor_status,final_status').eq('owner_character_id',self.character_id).order('created_at',desc=True).limit(5).execute().data or []
+        desc='Belum ada pengajuan perusahaan.' if not rows else '\n'.join('**%s** — Polisi: `%s` • Wali kota: `%s` • Final: `%s`'%(x['company_name'],x['police_status'],x['mayor_status'],x['final_status']) for x in rows)
+        await i.response.edit_message(embed=discord.Embed(title='🏢 Perusahaan',description=desc,color=discord.Color.gold()),view=self)
+    @discord.ui.button(label='Kembali',emoji='↩️',style=discord.ButtonStyle.secondary)
+    async def back(self,i,b):
+        c=get_character(i.user.id,i.guild.id)
+        if not c or c['id']!=self.character_id:return await i.response.send_message('❌ Ini bukan dashboard karaktermu.',ephemeral=True)
+        await i.response.edit_message(embed=discord.Embed(title='💼 Karier',description='Bangun kehidupan profesionalmu.',color=discord.Color.blurple()),view=CareerHubView(self.character_id))
 class CareerHubView(discord.ui.View):
     def __init__(self,character_id):
         super().__init__(timeout=300);self.character_id=character_id
     @discord.ui.button(label="Lihat Lowongan",emoji="💼",style=discord.ButtonStyle.primary)
     async def listings(self,i,b):await i.response.edit_message(embed=jobs_embed(),view=JobView(self.character_id))
+    @discord.ui.button(label='Perusahaan',emoji='🏢',style=discord.ButtonStyle.success,row=1)
+    async def company(self,i,b):
+        c=get_character(i.user.id,i.guild.id)
+        if not c or c['id']!=self.character_id:return await i.response.send_message('❌ Ini bukan dashboard karaktermu.',ephemeral=True)
+        await i.response.edit_message(embed=discord.Embed(title='🏢 Perusahaan',description='Bangun perusahaan melalui alur polisi → wali kota → legalitas.',color=discord.Color.gold()),view=CompanyView(self.character_id))
+
     @discord.ui.button(label="Status Kerja",emoji="📋",style=discord.ButtonStyle.success)
     async def status(self,i,b):
         try:

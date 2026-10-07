@@ -17,11 +17,11 @@ on public.game_bank_accounts(character_id) where status='active';
 
 create or replace function public.game_travel(p_character_id bigint,p_destination text)
 returns jsonb language plpgsql security definer set search_path=public as $function$
-declare c public.game_characters%rowtype; n public.game_needs%rowtype; w public.game_wallets%rowtype; travel_cost bigint:=75000; new_cash bigint; dest text;
+declare c public.game_characters%rowtype; n public.game_needs%rowtype; w public.game_wallets%rowtype; destrow public.game_cities%rowtype; travel_cost bigint:=75000; new_cash bigint; dest text;
 begin
  dest:=trim(p_destination);
- if dest is null or length(dest)=0 then raise exception 'INVALID_DESTINATION'; end if;
- if not exists(select 1 from public.game_cities where active and name=dest) then raise exception 'DESTINATION_NOT_AVAILABLE'; end if;
+ select * into destrow from public.game_cities where active and name=dest limit 1;
+ if not found then raise exception 'DESTINATION_NOT_AVAILABLE'; end if;
  select * into c from public.game_characters where id=p_character_id for update;
  if not found then raise exception 'CHARACTER_NOT_FOUND'; end if;
  if c.status<>'active' then raise exception 'CHARACTER_NOT_ACTIVE'; end if;
@@ -31,11 +31,11 @@ begin
  if n.energy<15 then raise exception 'NOT_ENOUGH_ENERGY'; end if;
  new_cash:=w.cash-travel_cost;
  update public.game_wallets set cash=new_cash,updated_at=now() where id=w.id;
- update public.game_characters set city=dest,updated_at=now() where id=p_character_id;
+ update public.game_characters set city=destrow.name,province=(select r.name from public.game_regions r where r.id=destrow.region_id),updated_at=now() where id=p_character_id;
  update public.game_needs set energy=greatest(0,energy-15),hunger=greatest(0,hunger-5),thirst=greatest(0,thirst-5),stress=greatest(0,stress-3),updated_at=now() where character_id=p_character_id;
- insert into public.game_transactions(wallet_id,account_type,amount,balance_after,transaction_type,description,reference_key) values(w.id,'cash',-travel_cost,new_cash,'travel','Perjalanan ke '||dest,'travel:'||lower(dest));
- insert into public.game_action_log(character_id,action_key,action_name,outcome,money_delta,energy_delta,hunger_delta,thirst_delta,stress_delta,metadata) values(p_character_id,'travel','Perjalanan','Kamu bepergian ke '||dest||'.',-travel_cost,-15,-5,-5,-3,jsonb_build_object('destination',dest));
- return jsonb_build_object('success',true,'destination',dest,'cash',new_cash);
+ insert into public.game_transactions(wallet_id,account_type,amount,balance_after,transaction_type,description,reference_key) values(w.id,'cash',-travel_cost,new_cash,'travel','Perjalanan ke '||destrow.name,'travel:'||lower(destrow.name));
+ insert into public.game_action_log(character_id,action_key,action_name,outcome,money_delta,energy_delta,hunger_delta,thirst_delta,stress_delta,metadata) values(p_character_id,'travel','Perjalanan','Kamu bepergian ke '||destrow.name||'.',-travel_cost,-15,-5,-5,-3,jsonb_build_object('destination',destrow.name,'region_id',destrow.region_id));
+ return jsonb_build_object('success',true,'destination',destrow.name,'province',(select r.name from public.game_regions r where r.id=destrow.region_id),'cash',new_cash);
 end $function$;
 
 create or replace function public.game_create_supply_order(p_supplier bigint,p_buyer bigint,p_item_key text,p_quantity bigint,p_unit_price bigint)

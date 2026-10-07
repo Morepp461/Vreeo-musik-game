@@ -167,3 +167,14 @@ alter table game_inventory enable row level security;
 alter table game_asset_templates enable row level security;
 alter table game_owned_assets enable row level security;
 alter table game_needs enable row level security;
+
+
+-- WNI SIMULATOR Batch 8: Autonomous NPC Life
+alter table game_ai_characters
+  add column if not exists energy smallint not null default 80 check (energy between 0 and 100),
+  add column if not exists hunger smallint not null default 20 check (hunger between 0 and 100),
+  add column if not exists happiness smallint not null default 70 check (happiness between 0 and 100),
+  add column if not exists stress smallint not null default 20 check (stress between 0 and 100),
+  add column if not exists current_activity text not null default 'idle',
+  add column if not exists last_activity_at timestamptz;
+create index if not exists game_ai_characters_autonomy_idx on game_ai_characters(alive,last_simulated_at);

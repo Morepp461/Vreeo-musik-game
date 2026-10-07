@@ -16,6 +16,7 @@ class VreeoBot(commands.Bot):
     async def setup_hook(self):
         await self.load_extension("bot.music.commands")
         await self.load_extension("bot.games.commands")
+        await self.load_extension("bot.games.economy")
         await self.load_extension("bot.games.tournament")
         if DISCORD_GUILD_ID:
             guild=discord.Object(id=DISCORD_GUILD_ID)

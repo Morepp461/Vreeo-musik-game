@@ -7,6 +7,7 @@ from .player import get_character, get_wallet, get_needs, get_inventory, get_ass
 from ..database import supabase
 from .gameplay import ActionView, TravelView, ShopView, action_embed
 from .career import CareerHubView
+from .banking import BankView, bank_embed
 from .social import WorldView
 
 GODMODE_OWNER_ID = 1441030290280550513
@@ -57,6 +58,13 @@ class PlayerView(discord.ui.View):
         if not c or c["id"] != self.character_id:
             return await interaction.response.send_message("❌ Ini bukan dashboard karaktermu.", ephemeral=True)
         await interaction.response.edit_message(embed=discord.Embed(title="💼 Karier",description="Bangun kehidupan profesionalmu. Cari kerja dan mulai dari bawah.",color=discord.Color.blurple()),view=CareerHubView(self.character_id))
+
+    @discord.ui.button(label="Bank", emoji="🏦", style=discord.ButtonStyle.success, row=2)
+    async def bank(self, interaction, button):
+        own=get_character(interaction.user.id,interaction.guild.id)
+        if not own or own["id"]!=self.character_id:
+            return await interaction.response.send_message("❌ Ini bukan dashboard karaktermu.",ephemeral=True)
+        await interaction.response.edit_message(embed=bank_embed(self.character_id),view=BankView(self.character_id))
 
     @discord.ui.button(label="Dunia", emoji="🌏", style=discord.ButtonStyle.primary, row=2)
     async def world(self, interaction, button):

@@ -6,6 +6,7 @@ from .world import bootstrap_guild, GAME_NAME
 from .player import get_character, get_wallet, get_needs, get_inventory, get_assets, profile_embed, inventory_text, assets_text, RegisterView, money
 from ..database import supabase
 from .gameplay import ActionView, TravelView, ShopView, action_embed
+from .career import CareerHubView
 
 GODMODE_OWNER_ID = 1441030290280550513
 
@@ -48,6 +49,13 @@ class PlayerView(discord.ui.View):
         for key,label,emoji in [("health","Kesehatan","❤️"),("hunger","Lapar","🍚"),("thirst","Haus","💧"),("energy","Energi","⚡"),("happiness","Kebahagiaan","😊"),("stress","Stres","😵")]:
             e.add_field(name=f"{emoji} {label}", value=f"{n.get(key,0)}/100", inline=True)
         await interaction.response.edit_message(embed=e, view=self)
+
+    @discord.ui.button(label="Karier", emoji="💼", style=discord.ButtonStyle.success, row=1)
+    async def career(self, interaction, button):
+        c = get_character(interaction.user.id, interaction.guild.id)
+        if not c or c["id"] != self.character_id:
+            return await interaction.response.send_message("❌ Ini bukan dashboard karaktermu.", ephemeral=True)
+        await interaction.response.edit_message(embed=discord.Embed(title="💼 Karier",description="Bangun kehidupan profesionalmu. Cari kerja dan mulai dari bawah.",color=discord.Color.blurple()),view=CareerHubView(self.character_id))
 
     @discord.ui.button(label="Kehidupan", emoji="🎮", style=discord.ButtonStyle.primary, row=1)
     async def life(self, interaction, button):

@@ -25,6 +25,7 @@ class Economy(commands.Cog):
             health=supabase.rpc("game_run_health_tick",{"p_tick_key":key+"-health"}).execute().data
             quests=supabase.rpc("game_run_job_quest_tick",{"p_tick_key":key+"-career"}).execute().data
             relationships=supabase.rpc("game_update_player_relationship_distance").execute().data
+            social=supabase.rpc("game_run_social_control_tick",{"p_tick_key":key+"-social"}).execute().data
             world_state=supabase.table("game_world_state").select("world_time").eq("id",1).limit(1).execute().data
             game_time=(world_state[0]["world_time"] if world_state else datetime.now(timezone.utc).isoformat())
             period_key=str(game_time)[:7]
@@ -36,7 +37,7 @@ class Economy(commands.Cog):
                 try: await reconcile_companies(guild)
                 except Exception: log.exception("WNI company reconciliation gagal untuk guild %s",guild.id)
             r=supabase.rpc("game_run_economy_tick",{"p_tick_key":key}).execute().data
-            log.info("WNI world tick: %s | autonomous AI: %s | law: %s | government: %s | city government: %s | city: %s | health: %s | career quests: %s | relationships: %s | payroll: %s | business finance: %s | economy: %s",world,ai,law,government,city_government,city,health,quests,relationships,payroll,business_payroll,r)
+            log.info("WNI world tick: %s | autonomous AI: %s | law: %s | government: %s | city government: %s | city: %s | health: %s | career quests: %s | relationships: %s | social control: %s | payroll: %s | business finance: %s | economy: %s",world,ai,law,government,city_government,city,health,quests,relationships,social,payroll,business_payroll,r)
         except Exception:
             log.exception("WNI economy tick gagal")
     @tick.before_loop

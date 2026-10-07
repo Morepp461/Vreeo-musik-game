@@ -116,7 +116,8 @@ class QuestView(discord.ui.View):
     async def refresh(self,i,b): await self.render(i)
     @discord.ui.button(label="↩️ Karier",style=discord.ButtonStyle.primary)
     async def back(self,i,b): await i.response.edit_message(embed=discord.Embed(title="💼 Karier",description="Bangun kehidupan profesionalmu.",color=discord.Color.blurple()),view=CareerHubView(self.character_id))
-\nclass CareerHubView(discord.ui.View):
+
+class CareerHubView(discord.ui.View):
     def __init__(self,character_id):
         super().__init__(timeout=300);self.character_id=character_id
     @discord.ui.button(label="Lihat Lowongan",emoji="💼",style=discord.ButtonStyle.primary)
@@ -127,7 +128,12 @@ class QuestView(discord.ui.View):
         if not c or c['id']!=self.character_id:return await i.response.send_message('❌ Ini bukan dashboard karaktermu.',ephemeral=True)
         await i.response.edit_message(embed=discord.Embed(title='🏢 Perusahaan',description='Bangun perusahaan melalui alur polisi → wali kota → legalitas.',color=discord.Color.gold()),view=CompanyView(self.character_id))
 
-    @discord.ui.button(label="Quest Profesi",emoji="🎯",style=discord.ButtonStyle.primary,row=2)\n    async def quest(self,i,b):\n        c=get_character(i.user.id,i.guild.id)\n        if not c or c["id"]!=self.character_id:return await i.response.send_message("❌ Ini bukan dashboard karaktermu.",ephemeral=True)\n        await i.response.edit_message(embed=discord.Embed(title="🎯 Quest Profesi",description="Memuat kondisi dunia...",color=discord.Color.blurple()),view=QuestView(self.character_id))\n\n    @discord.ui.button(label="Status Kerja",emoji="📋",style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Quest Profesi",emoji="🎯",style=discord.ButtonStyle.primary,row=2)
+    async def quest(self,i,b):
+        c=get_character(i.user.id,i.guild.id)
+        if not c or c["id"]!=self.character_id:return await i.response.send_message("❌ Ini bukan dashboard karaktermu.",ephemeral=True)
+        await i.response.edit_message(embed=discord.Embed(title="🎯 Quest Profesi",description="Memuat kondisi dunia...",color=discord.Color.blurple()),view=QuestView(self.character_id))
+\n    @discord.ui.button(label="Status Kerja",emoji="📋",style=discord.ButtonStyle.success)
     async def status(self,i,b):
         try:
             rows=supabase.table("game_character_jobs").select("id,job_id,salary,skill,status,started_at,performance,position_level,career_xp,employer_institution_id,position_title").eq("character_id",self.character_id).eq("status","active").limit(1).execute().data or []

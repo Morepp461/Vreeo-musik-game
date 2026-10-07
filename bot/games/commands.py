@@ -127,13 +127,13 @@ class GodModeView(discord.ui.View):
     async def reconcile(self, interaction, button):
         from .world import bootstrap_guild
         result = await bootstrap_guild(interaction.guild)
-        supabase.table("game_audit_log").insert({
-            "actor_type":"godmode",
-            "actor_id":str(interaction.user.id),
-            "action":"discord_reconcile",
-            "target_type":"guild",
-            "target_id":str(interaction.guild.id),
-            "metadata":result or {},
+        supabase.rpc("game_reconcile_discord_binding", {
+            "p_guild_id":str(interaction.guild.id),
+            "p_entity_type":"guild_reconcile",
+            "p_entity_key":"bootstrap",
+            "p_discord_id":str(interaction.guild.id),
+            "p_name":interaction.guild.name,
+            "p_actor_id":str(interaction.user.id),
         }).execute()
         await interaction.response.send_message("✅ Rekonsiliasi Discord selesai. Role + channel WNI diverifikasi tanpa membuat kategori baru.", ephemeral=True)
 

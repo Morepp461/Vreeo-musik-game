@@ -39,7 +39,7 @@ AI_LAST_NAMES = [
 AI_CITIES = [
     "Jakarta","Surabaya","Bandung","Medan","Semarang","Makassar","Malang",
     "Palembang","Denpasar","Yogyakarta","Balikpapan","Banjarmasin","Padang",
-    "Pekanbaru","Manado","Samarinda","Pontianak","Mataram","Solo","Bogor",
+    "Pekanbaru","Manado","Samarinda","Pontianak","Mataram","Solo","Bogor","Jayapura",
 ]
 AI_JOBS = [
     "Karyawan swasta","Pedagang","Guru","Perawat","Polisi","Teknisi",
@@ -163,7 +163,13 @@ def seed_ai_population(target=120):
     used = set()
     for i in range(current, target):
         while True:
-            name = f"{random.choice(AI_FIRST_NAMES)} {random.choice(AI_LAST_NAMES)}"
+            gender = random.choice(["Laki-laki","Perempuan"])\n            if gender == "Laki-laki":
+                first_pool = ["Agus","Budi","Eko","Fajar","Gilang","Indra","Joko","Raka","Teguh"]
+                last_pool = ["Pratama","Wijaya","Saputra","Santoso","Hidayat","Nugroho","Wibowo","Setiawan"]
+            else:
+                first_pool = ["Citra","Dewi","Hana","Kurnia","Laras","Maya","Nadia","Putri","Sari","Vina"]
+                last_pool = ["Permata","Lestari","Utami","Wijaya","Santoso","Hidayat","Nugroho","Setiawan"]
+            name = f"{random.choice(first_pool)} {random.choice(last_pool)}"
             if name not in used:
                 used.add(name)
                 break
@@ -171,7 +177,7 @@ def seed_ai_population(target=120):
             "external_key": f"seed-ai-{i+1:04d}",
             "name": name,
             "age": random.randint(18, 65),
-            "gender": random.choice(["Laki-laki", "Perempuan"]),
+            "gender": gender,
             "occupation": random.choice(AI_JOBS),
             "city": random.choice(AI_CITIES),
             "personality": {

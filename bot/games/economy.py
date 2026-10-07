@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 from discord.ext import commands, tasks
 from ..database import supabase
+from .world import reconcile_companies
 
 log=logging.getLogger(__name__)
 
@@ -25,6 +26,9 @@ class Economy(commands.Cog):
             period_key=str(game_time)[:7]
             payroll=supabase.rpc("game_payroll_period",{"p_period_key":period_key}).execute().data
             business_payroll=supabase.rpc("game_close_business_finance",{"p_period_key":period_key}).execute().data
+            for guild in self.bot.guilds:
+                try: await reconcile_companies(guild)
+                except Exception: log.exception("WNI company reconciliation gagal untuk guild %s",guild.id)
             r=supabase.rpc("game_run_economy_tick",{"p_tick_key":key}).execute().data
             log.info("WNI world tick: %s | autonomous AI: %s | law: %s | government: %s | city: %s | payroll: %s | business finance: %s | economy: %s",world,ai,law,government,city,payroll,business_payroll,r)
         except Exception:

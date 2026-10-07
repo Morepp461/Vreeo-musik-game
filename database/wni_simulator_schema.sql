@@ -248,4 +248,5 @@ create table if not exists game_law_ticks (
 create index if not exists game_justice_cases_status_idx on game_justice_cases(status);
 create index if not exists game_justice_cases_character_idx on game_justice_cases(character_id);
 create index if not exists game_justice_sentences_status_idx on game_justice_sentences(status);
+create index if not exists game_justice_sentences_character_idx on game_justice_sentences(character_id);
 create index if not exists game_crime_events_status_idx on game_crime_events(status);

@@ -18,7 +18,7 @@ BASE={
     "quiet":True,
     "no_warnings":True,
     "noplaylist":True,
-    "format":"bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best",
+    "format":"bestaudio/best",
     "skip_download":True,
     "extractor_args":{
         "youtubepot-bgutilscript":{"server_home":[POT_SCRIPT_HOME]}
@@ -44,7 +44,7 @@ async def _run_youtube_with_fallback(query,opts,timeout=25):
     # is unsafe here: current YouTube GVS can return HTTP 403 even when the
     # PO token was generated successfully.
     attempts=(
-        (["web_safari"], "bestaudio[protocol^=m3u8]/bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best"),
+        (["web_safari"], "bestaudio/best"),
         (None, None),
     )
     last=None
